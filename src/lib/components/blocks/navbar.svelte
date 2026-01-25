@@ -1,17 +1,8 @@
 <script lang="ts">
-	import {
-		Menu,
-		X,
-		Github,
-		Settings,
-		LayoutDashboard,
-		FileText,
-		Play,
-		Shield
-	} from '@lucide/svelte';
+	import { Menu, X, Github, LayoutDashboard, FileText, Play } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import ModeToggle from './mode-toggle.svelte';
+	import { page } from '$app/state';
 
 	let isOpen = $state(false);
 
@@ -21,6 +12,22 @@
 
 	function closeMenu() {
 		isOpen = false;
+	}
+
+	const navItems = [
+		{ href: '/', label: 'Home', icon: LayoutDashboard },
+		{ href: '/docs', label: 'Docs', icon: FileText },
+		{ href: '/playground', label: 'Playground', icon: Play }
+	];
+
+	function isActive(href: string): boolean {
+		if (href === '/') {
+			return page.url.pathname === '/';
+		}
+		if (href === '/docs') {
+			return page.url.pathname.startsWith('/docs');
+		}
+		return page.url.pathname === href;
 	}
 </script>
 
@@ -46,20 +53,17 @@
 
 			<!-- Desktop Navigation -->
 			<div class="hidden items-center gap-1 md:flex">
-				<Button variant="ghost" size="sm" class="gap-2">
-					<LayoutDashboard class="h-4 w-4" />
-					<a href="/" class="text-sm font-medium transition-colors hover:text-primary">Home</a>
-				</Button>
-				<Button variant="ghost" size="sm" class="gap-2">
-					<FileText class="h-4 w-4" />
-					<a href="/docs" class="text-sm font-medium transition-colors hover:text-primary">Docs</a>
-				</Button>
-				<Button variant="ghost" size="sm" class="gap-2">
-					<Play class="h-4 w-4" />
-					<a href="/playground" class="text-sm font-medium transition-colors hover:text-primary"
-						>Playground</a
+				{#each navItems as item (item.href)}
+					<Button
+						variant="ghost"
+						size="sm"
+						href={item.href}
+						class="gap-2 {isActive(item.href) ? 'bg-accent text-accent-foreground' : ''}"
 					>
-				</Button>
+						<item.icon class="h-4 w-4" />
+						<span class="text-sm font-medium">{item.label}</span>
+					</Button>
+				{/each}
 			</div>
 
 			<!-- Desktop Actions -->
@@ -76,27 +80,6 @@
 					</a>
 				</Button>
 				<ModeToggle />
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} variant="ghost" size="icon" title="Settings">
-								<Settings class="h-5 w-5" />
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="end" class="w-48">
-						<DropdownMenu.Label>Settings</DropdownMenu.Label>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item class="gap-2">
-							<Settings class="h-4 w-4" />
-							<span>General</span>
-						</DropdownMenu.Item>
-						<DropdownMenu.Item class="gap-2">
-							<Shield class="h-4 w-4" />
-							<span>Privacy</span>
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
 			</div>
 
 			<!-- Mobile Menu Button -->
@@ -113,18 +96,20 @@
 		{#if isOpen}
 			<div class="border-t border-border bg-background pb-4 md:hidden">
 				<div class="flex flex-col gap-1 pt-4">
-					<Button variant="ghost" class="w-full justify-start gap-2" onclick={closeMenu}>
-						<LayoutDashboard class="h-4 w-4" />
-						<a href="/" class="text-sm font-medium">Home</a>
-					</Button>
-					<Button variant="ghost" class="w-full justify-start gap-2" onclick={closeMenu}>
-						<FileText class="h-4 w-4" />
-						<a href="/docs" class="text-sm font-medium">Docs</a>
-					</Button>
-					<Button variant="ghost" class="w-full justify-start gap-2" onclick={closeMenu}>
-						<Play class="h-4 w-4" />
-						<a href="/playground" class="text-sm font-medium">Playground</a>
-					</Button>
+					{#each navItems as item (item.href)}
+						<Button
+							variant="ghost"
+							href={item.href}
+							class="w-full justify-start gap-2 {isActive(item.href)
+								? 'bg-accent text-accent-foreground'
+								: ''}"
+							onclick={closeMenu}
+						>
+							<item.icon class="h-4 w-4" />
+							<span class="text-sm font-medium">{item.label}</span>
+						</Button>
+					{/each}
+
 					<div class="my-2 border-t border-border"></div>
 					<div class="flex items-center justify-between px-2">
 						<div class="flex gap-1">
@@ -144,9 +129,6 @@
 							</Button>
 							<ModeToggle />
 						</div>
-						<Button variant="ghost" size="icon" onclick={closeMenu} title="Settings">
-							<Settings class="h-5 w-5" />
-						</Button>
 					</div>
 				</div>
 			</div>
