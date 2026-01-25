@@ -58,7 +58,7 @@
 		</div>
 
 		<div class="relative min-h-0 flex-1">
-			<ScrollArea class="h-full p-4">
+			<ScrollArea class="h-144 p-4">
 				<Tabs.Content value="markdown" class="mt-0">
 					<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{result.markdown ||
 							'No Markdown content'}</pre>
