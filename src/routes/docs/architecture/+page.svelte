@@ -208,7 +208,9 @@
 			<Alert.Title>Modern Reactivity</Alert.Title>
 			<Alert.Description>
 				All components use Svelte 5 runes for fine-grained reactivity. Legacy patterns like
-				<code>let</code>, <code>$:</code>, and <code>export let</code> are not used.
+				<pre class="overflow-x-auto rounded bg-muted p-3 text-xs"> <code>let</code>, <code>$:</code
+					>, and <code>export let</code></pre>
+				are not used.
 			</Alert.Description>
 		</Alert.Root>
 
