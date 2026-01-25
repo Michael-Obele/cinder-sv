@@ -87,6 +87,7 @@ Default to **Remote Functions** for all backend communication with Cinder.
 
 - `src/remote/`: Remote Functions for Cinder backend API calls.
 - `src/lib/components/ui/`: shadcn-svelte / Bits UI primitive components.
+- `src/lib/components/blocks/`: Custom components and blocks.
 - `src/routes/`: Router logic. Use Remote Functions for data fetching.
 - `static/`: Static assets.
 - `frontend_plan/`: Project planning and documentation.

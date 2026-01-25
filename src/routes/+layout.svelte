@@ -3,8 +3,9 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { ModeWatcher } from 'mode-watcher';
 	import { Toaster } from '$lib/components/ui/sonner';
-	import Navbar from '$lib/components/navbar.svelte';
-	import Footer from '$lib/components/footer.svelte';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import Navbar from '$lib/components/blocks/navbar.svelte';
+	import Footer from '$lib/components/blocks/footer.svelte';
 
 	let { children } = $props();
 </script>
@@ -14,10 +15,12 @@
 <ModeWatcher />
 <Toaster />
 
-<div class="flex min-h-screen flex-col">
-	<Navbar />
-	<main class="flex-1">
-		{@render children()}
-	</main>
-	<Footer />
-</div>
+<Tooltip.Provider delayDuration={400}>
+	<div class="flex min-h-screen flex-col">
+		<Navbar />
+		<main class="flex-1">
+			{@render children()}
+		</main>
+		<Footer />
+	</div>
+</Tooltip.Provider>
