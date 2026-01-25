@@ -17,7 +17,7 @@
 			</Button>
 		{/snippet}
 	</Sheet.Trigger>
-	<Sheet.Content class="w-[400px] overflow-y-auto sm:w-[540px]">
+	<Sheet.Content class="w-100 overflow-y-auto px-6 sm:w-135">
 		<Sheet.Header>
 			<Sheet.Title>Advanced Options</Sheet.Title>
 			<Sheet.Description>Configure advanced scraping parameters.</Sheet.Description>
