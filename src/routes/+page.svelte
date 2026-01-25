@@ -5,7 +5,7 @@
 
 <div class="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center p-4 text-center">
 	<h1 class="mb-4 text-4xl font-extrabold tracking-tight text-primary lg:text-5xl">Cinder</h1>
-	<p class="mb-8 max-w-[600px] text-xl text-muted-foreground">
+	<p class="mb-8 max-w-150 text-xl text-muted-foreground">
 		The ultimate scraping and crawling platform. Turn websites into LLM-ready data.
 	</p>
 

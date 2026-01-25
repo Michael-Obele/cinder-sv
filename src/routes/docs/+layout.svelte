@@ -36,7 +36,7 @@
 				Cinder Docs
 			</h2>
 		</Sidebar.Header>
-		<Sidebar.Content>
+		<Sidebar.Content class="px-5">
 			{#each items as group}
 				<Sidebar.Group>
 					<Sidebar.GroupLabel>{group.title}</Sidebar.GroupLabel>

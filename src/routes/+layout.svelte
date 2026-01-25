@@ -3,6 +3,8 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { ModeWatcher } from 'mode-watcher';
 	import { Toaster } from '$lib/components/ui/sonner';
+	import Navbar from '$lib/components/navbar.svelte';
+	import Footer from '$lib/components/footer.svelte';
 
 	let { children } = $props();
 </script>
@@ -11,4 +13,11 @@
 
 <ModeWatcher />
 <Toaster />
-{@render children()}
+
+<div class="flex min-h-screen flex-col">
+	<Navbar />
+	<main class="flex-1">
+		{@render children()}
+	</main>
+	<Footer />
+</div>
