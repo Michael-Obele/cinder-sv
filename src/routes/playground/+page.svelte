@@ -258,7 +258,7 @@
 								<span class="flex items-center gap-1.5"
 									><Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase"
 										>Engine</Badge
-									> Firecrawl v1</span
+									> Cinder v1</span
 								>
 							</div>
 							<span>Ready for extraction</span>

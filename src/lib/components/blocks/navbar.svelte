@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { Menu, X, Github, LayoutDashboard, FileText, Play } from '@lucide/svelte';
+	import { Menu, X, Github, LayoutDashboard, FileText, Play, Crown, LogIn } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import ModeToggle from './mode-toggle.svelte';
 	import { page } from '$app/state';
+	import { getAuthStatus } from '$lib/remote/auth.remote';
+
+	let auth = getAuthStatus();
+	let user = $derived(auth.current?.user);
 
 	let isOpen = $state(false);
 
@@ -68,6 +72,18 @@
 
 			<!-- Desktop Actions -->
 			<div class="hidden items-center gap-2 md:flex">
+				{#if user}
+					<div class="mr-2 flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 py-1.5 pl-2 pr-3 text-xs font-bold text-amber-500 shadow-[0_0_15px_-3px_rgba(245,158,11,0.2)] animate-in fade-in zoom-in">
+						<Crown class="h-3.5 w-3.5 fill-amber-500/20" />
+						<span>MASTER ACCESS</span>
+					</div>
+				{:else}
+					<Button href="/login" variant="ghost" size="sm" class="gap-2 text-muted-foreground hover:text-foreground hover:bg-accent mr-2">
+						<LogIn class="h-4 w-4" />
+						<span>Elevate</span>
+					</Button>
+				{/if}
+
 				<Button variant="ghost" size="icon" class="text-muted-foreground hover:text-foreground">
 					<a
 						href="https://github.com/Michael-Obele/cinder-sv"
