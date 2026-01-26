@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { scrapeUrl, crawlUrl, searchWeb, getCrawlStatus } from '$lib/remote/cinder.remote';
+	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
@@ -24,6 +26,7 @@
 	import { PersistedState } from 'runed';
 
 	// Local State
+	const isMobile = new IsMobile();
 	let crawlId = $state<string | null>(null);
 	let activeTab = $state('scrape');
 	let sidebarOpen = $state(true);
@@ -43,8 +46,10 @@
 		title: string;
 		url: string;
 		timestamp: string;
+		data?: any;
 	};
 	const searchHistory = new PersistedState<HistoryItem[]>('cinder-history', []);
+	let selectedHistoryItem = $state<HistoryItem | null>(null);
 
 	function addToHistory(item: HistoryItem) {
 		searchHistory.current = [item, ...searchHistory.current.slice(0, 19)];
@@ -52,6 +57,7 @@
 
 	function clearHistory() {
 		searchHistory.current = [];
+		selectedHistoryItem = null;
 	}
 
 	// Polling for crawl status
@@ -66,6 +72,16 @@
 
 	// Derived states
 	let crawlProgress = $derived(statusQuery?.current?.status === 'completed' ? 100 : 50);
+	let displayedScrapeResult = $derived(
+		selectedHistoryItem?.type === 'scrape' && selectedHistoryItem.data
+			? selectedHistoryItem.data
+			: scrapeUrl.result
+	);
+	let displayedSearchResult = $derived(
+		selectedHistoryItem?.type === 'search' && selectedHistoryItem.data
+			? selectedHistoryItem.data
+			: searchWeb.result
+	);
 	let isCurrentlyLoading = $derived(
 		!!scrapeUrl.pending ||
 			!!crawlUrl.pending ||
@@ -74,61 +90,76 @@
 	);
 </script>
 
-<div class="flex h-[calc(100vh-4rem)] overflow-hidden bg-background">
-	<!-- History Sidebar -->
-	{#if sidebarOpen}
-		<aside class=" hidden w-80 flex-col border-r bg-muted/30 lg:flex">
-			<div class="flex items-center justify-between border-b bg-background/50 p-4 backdrop-blur">
-				<div class="flex items-center gap-2">
-					<History class="size-4 text-muted-foreground" />
-					<h2 class="text-sm font-semibold">History</h2>
-				</div>
-				<Button
-					variant="ghost"
-					size="icon"
-					class="size-7"
-					onclick={() => clearHistory()}
-					title="Clear history"
+{#snippet historyContent()}
+	<div class="flex h-full flex-col">
+		<!-- Header -->
+		<div class="flex items-center gap-2 border-b bg-background/50 p-4 backdrop-blur">
+			<History class="size-4 text-muted-foreground" />
+			<h2 class="text-sm font-semibold">History</h2>
+		</div>
+
+		<!-- History List -->
+		<div class="flex-1 space-y-2 overflow-y-auto p-3">
+			{#each searchHistory.current as item (item.id)}
+				<button
+					class="group relative w-full rounded-lg border bg-background p-2.5 text-left transition-all hover:border-primary/50"
+					onclick={() => {
+						activeTab = item.type;
+						selectedHistoryItem = item;
+						if (item.type === 'crawl' && item.data?.id) {
+							crawlId = item.data.id;
+						}
+					}}
 				>
-					<Trash2 class="size-3.5" />
-				</Button>
-			</div>
-			<div class="flex-1 space-y-2 overflow-y-auto p-3">
-				{#each searchHistory.current as item (item.id)}
-					<button
-						class="group relative w-full rounded-lg border bg-background p-2.5 text-left transition-all hover:border-primary/50"
-						onclick={() => {
-							if (item.type === 'scrape') activeTab = 'scrape';
-							else if (item.type === 'crawl') activeTab = 'crawl';
-						}}
-					>
-						<div class="mb-1 flex items-center gap-2">
-							{#if item.type === 'scrape'}<Globe class="size-3 text-blue-400" />
-							{:else if item.type === 'crawl'}<Layers class="size-3 text-amber-400" />
-							{:else}<Search class="size-3 text-primary" />
-							{/if}
-							<span class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-								{item.type}
-							</span>
-						</div>
-						<div class="truncate pr-4 text-xs font-medium">{item.title}</div>
-						<div class="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-							<Clock class="size-2.5" />
-							{new Date(item.timestamp).toLocaleTimeString([], {
-								hour: '2-digit',
-								minute: '2-digit'
-							})}
-						</div>
-					</button>
-				{:else}
-					<div
-						class="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50"
-					>
-						<History class="size-8 mb-2 stroke-[1px]" />
-						<p class="text-xs">No history yet</p>
+					<div class="mb-1 flex items-center gap-2">
+						{#if item.type === 'scrape'}<Globe class="size-3 text-blue-400" />
+						{:else if item.type === 'crawl'}<Layers class="size-3 text-amber-400" />
+						{:else}<Search class="size-3 text-primary" />
+						{/if}
+						<span class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+							{item.type}
+						</span>
 					</div>
-				{/each}
-			</div>
+					<div class="truncate pr-4 text-xs font-medium">{item.title}</div>
+					<div class="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+						<Clock class="size-2.5" />
+						{new Date(item.timestamp).toLocaleTimeString([], {
+							hour: '2-digit',
+							minute: '2-digit'
+						})}
+					</div>
+				</button>
+			{:else}
+				<div
+					class="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50"
+				>
+					<History class="size-8 mb-2 stroke-[1px]" />
+					<p class="text-xs">No history yet</p>
+				</div>
+			{/each}
+		</div>
+
+		<!-- Footer: Clear History Action -->
+		<div class="border-t bg-background/50 p-3 backdrop-blur">
+			<Button
+				variant="destructive"
+				size="sm"
+				class="w-full"
+				onclick={() => clearHistory()}
+				title="Clear all history"
+			>
+				<Trash2 class="mr-2 size-3.5" />
+				Clear History
+			</Button>
+		</div>
+	</div>
+{/snippet}
+
+<div class="flex h-[calc(100vh-4rem)] overflow-hidden bg-background">
+	<!-- History Sidebar (Desktop Only) -->
+	{#if !isMobile.current && sidebarOpen}
+		<aside class="flex w-80 flex-col border-r bg-muted/30">
+			{@render historyContent()}
 		</aside>
 	{/if}
 
@@ -143,10 +174,24 @@
 					</p>
 				</div>
 				<div class="flex items-center gap-2">
-					<Button variant="outline" size="sm" onclick={() => (sidebarOpen = !sidebarOpen)}>
-						<History class="mr-2 size-4" />
-						{sidebarOpen ? 'Hide History' : 'Show History'}
-					</Button>
+					{#if isMobile.current}
+						<Sheet.Root>
+							<Sheet.Trigger class="inline-flex">
+								<Button variant="outline" size="sm">
+									<History class="mr-2 size-4" />
+									History
+								</Button>
+							</Sheet.Trigger>
+							<Sheet.Content side="left" class="w-80 p-0">
+								{@render historyContent()}
+							</Sheet.Content>
+						</Sheet.Root>
+					{:else}
+						<Button variant="outline" size="sm" onclick={() => (sidebarOpen = !sidebarOpen)}>
+							<History class="mr-2 size-4" />
+							{sidebarOpen ? 'Hide History' : 'Show History'}
+						</Button>
+					{/if}
 					<div
 						class="flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1.5 text-[10px] font-medium"
 					>
@@ -184,6 +229,7 @@
 							<form
 								{...scrapeUrl.enhance(async ({ submit }) => {
 									scrapeError = null;
+									selectedHistoryItem = null;
 									try {
 										await submit();
 										if (scrapeUrl.result) {
@@ -192,7 +238,8 @@
 												type: 'scrape',
 												title: (scrapeUrl.result as any).metadata?.title || 'Scraped Page',
 												url: (scrapeUrl.result as any).url || 'Unknown',
-												timestamp: new Date().toISOString()
+												timestamp: new Date().toISOString(),
+												data: scrapeUrl.result
 											});
 										}
 									} catch (e: any) {
@@ -293,10 +340,10 @@
 								<p class="text-sm opacity-90">{scrapeError}</p>
 							</div>
 						</div>
-					{:else if scrapeUrl.result}
+					{:else if displayedScrapeResult}
 						<div class="grid animate-in grid-cols-1 gap-6 duration-700 fade-in lg:grid-cols-3">
 							<div class="space-y-6 lg:col-span-1">
-								<ResultCard result={scrapeUrl.result} />
+								<ResultCard result={displayedScrapeResult} />
 								<div class="space-y-4 rounded-xl border bg-card p-5">
 									<h3 class="flex items-center gap-2 text-sm font-semibold">
 										<Layers class="size-4 text-primary" />
@@ -308,8 +355,10 @@
 											size="sm"
 											class="h-9 text-[11px] font-bold"
 											onclick={() => {
-												if (scrapeUrl.result)
-													navigator.clipboard.writeText(JSON.stringify(scrapeUrl.result, null, 2));
+												if (displayedScrapeResult)
+													navigator.clipboard.writeText(
+														JSON.stringify(displayedScrapeResult, null, 2)
+													);
 											}}
 										>
 											<Copy class="mr-2 size-3" /> JSON
@@ -319,7 +368,7 @@
 											size="sm"
 											class="h-9 text-[11px] font-bold"
 											onclick={() => {
-												const result = scrapeUrl.result as any;
+												const result = displayedScrapeResult as any;
 												if (result?.markdown) navigator.clipboard.writeText(result.markdown);
 											}}
 										>
@@ -329,7 +378,7 @@
 								</div>
 							</div>
 							<div class="lg:col-span-2">
-								<CodeViewer result={scrapeUrl.result} />
+								<CodeViewer result={displayedScrapeResult} />
 							</div>
 						</div>
 					{:else}
@@ -349,6 +398,7 @@
 							<form
 								{...crawlUrl.enhance(async ({ submit }) => {
 									crawlError = null;
+									selectedHistoryItem = null;
 									try {
 										await submit();
 										const result = crawlUrl.result as any;
@@ -359,7 +409,8 @@
 												type: 'crawl',
 												title: `Crawl: ${result.id}`,
 												url: 'Crawl Job',
-												timestamp: new Date().toISOString()
+												timestamp: new Date().toISOString(),
+												data: { id: result.id }
 											});
 										}
 									} catch (e: any) {
@@ -528,6 +579,7 @@
 							<form
 								{...searchWeb.enhance(async ({ submit }) => {
 									searchError = null;
+									selectedHistoryItem = null;
 									try {
 										await submit();
 										const result = searchWeb.result as any[];
@@ -537,7 +589,8 @@
 												type: 'search',
 												title: `Search: ${result.length} results`,
 												url: 'Search Results',
-												timestamp: new Date().toISOString()
+												timestamp: new Date().toISOString(),
+												data: result
 											});
 										}
 									} catch (e: any) {
@@ -628,11 +681,11 @@
 								<p class="text-sm opacity-90">{searchError}</p>
 							</div>
 						</div>
-					{:else if searchWeb.result}
+					{:else if displayedSearchResult}
 						<div
 							class="grid animate-in grid-cols-1 gap-4 duration-500 slide-in-from-bottom-4 md:grid-cols-2 lg:grid-cols-3"
 						>
-							{#each searchWeb.result as any[] as item (item.url)}
+							{#each displayedSearchResult as any[] as item (item.url)}
 								<div
 									class="group flex flex-col justify-between rounded-xl border bg-card p-4 transition-all hover:border-primary/50 hover:shadow-lg"
 								>
