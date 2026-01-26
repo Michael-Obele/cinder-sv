@@ -1,14 +1,20 @@
 # Cinder-sv
 
-**Modern Svelte 5 Frontend for the Cinder Scraper & Crawler Backend.**
+**A lightweight, Go-powered alternative to Firecrawl.**
 
 [![Svelte 5](https://img.shields.io/badge/Svelte-5.0-ff3e00?logo=svelte)](https://svelte.dev)
 [![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-4.0-38bdf8?logo=tailwind-css)](https://tailwindcss.com)
 [![Bun](https://img.shields.io/badge/Bun-1.1+-f9f1e1?logo=bun)](https://bun.sh)
 
-Cinder-sv is a high-performance web playground designed to demonstrate and utilize the power of the Cinder Go backend. It provides a seamless, type-safe interface for web scraping, deep domain crawling, and automated search-to-document pipelines.
+Cinder-sv is the modern Svelte 5 frontend for the [Cinder Scraper & Crawler Backend](https://github.com/Michael-Obele/cinder).
+
+I built Cinder because I wanted a lightweight, easily deployable version of what Firecrawl offers, leveraging a language that does the job better and easier: **Go**. While Firecrawl is powerful, Cinder focuses on speed, simplicity, and low-overhead deployment.
 
 ---
+
+## 👋 About the Author
+
+Hi, I'm [Michael Obele](https://github.com/Michael-Obele). I'm a Network Engineer by trade and a Svelte enthusiast by passion. I've spent a lot of time building specialized MCP servers and exploring the Svelte ecosystem. I'm building Cinder solo for now, focusing on creating high-performance tools that are actually enjoyable to deploy and use.
 
 ## 🚀 Key Features
 
@@ -16,13 +22,17 @@ Cinder-sv is a high-performance web playground designed to demonstrate and utili
 - **Scrape (Extract)**: Convert any URL into clean Markdown, HTML, or structured JSON. Supports JS rendering and mobile emulation.
 - **Deep Crawl**: Domain-wide discovery with real-time progress tracking and live link discovery logs.
 - **Integrated Search**: Search the web and immediately scrape the most relevant results into your workspace.
-- **Remote Function Architecture**: Uses SvelteKit's RPC-like Remote Functions for secure, server-side backend communication.
+- **Remote Function Architecture**: Uses SvelteKit's RPC-style Remote Functions as a secure bridge to the Cinder Go backend.
 - **Cinder Glow Theme**: A purpose-built, Slate and Amber-based high-contrast dark theme optimized for developer focus.
+
+## 🔮 Coming Soon: Cinder MCP
+
+There is already an **MCP version** of Cinder ready! It allows you to use Cinder's scraping and crawling capabilities directly within your AI workflows (like Claude Desktop or Cursor). It will be open-sourced very soon—stay tuned!
 
 ## 🛠 Tech Stack
 
 - **Framework**: [SvelteKit 5](https://kit.svelte.dev/) (using [Runes](https://svelte.dev/blog/runes) for reactive state).
-- **Communication**: [Remote Functions](https://kit.svelte.dev/docs/server-only-modules#remote-functions) (Secure Proxy logic).
+- **Communication**: [Remote Functions](https://kit.svelte.dev/docs/server-only-modules#remote-functions) (The primary RPC bridge for now).
 - **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) with OKLCH color spaces.
 - **Validation**: [Valibot](https://valibot.io/) (Lightweight schema validation).
 - **Icons**: [@lucide/svelte](https://lucide.dev/).
@@ -34,7 +44,7 @@ Cinder-sv is a high-performance web playground designed to demonstrate and utili
 ```text
 src/
 ├── remote/            # Remote Functions (Secure RPC proxy to Cinder backend)
-│   └── cinder.remote.ts # Logic for Scrape, Crawl, and Search
+│   └── cinder.remote.ts # Current core logic for Scrape, Crawl, and Search
 ├── lib/
 │   ├── components/    # Reusable UI Blocks (ResultCard, CodeViewer, etc.)
 │   └── assets/        # Global assets and styles
@@ -49,7 +59,7 @@ src/
 ### Prerequisites
 
 - [Bun](https://bun.sh) installed globally.
-- Access to a [Cinder Go Backend](https://github.com/saadeghi/daisyui) instance.
+- A running [Cinder Go Backend](https://github.com/Michael-Obele/cinder) instance.
 
 ### Installation
 
@@ -93,4 +103,4 @@ Cinder-sv follows a "Backend-as-Proxy" architecture using SvelteKit's server-sid
 
 ---
 
-Built with ❤️ by the Cinder Team.
+Built with ❤️ by [Michael-Obele](https://github.com/Michael-Obele).
