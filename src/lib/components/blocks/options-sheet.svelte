@@ -12,8 +12,8 @@
 <Sheet.Root>
 	<Sheet.Trigger>
 		{#snippet child({ props })}
-			<Button variant="outline" size="icon" {...props}>
-				<Settings class="h-4 w-4" />
+			<Button variant="outline" class="mt-1" size="icon" {...props}>
+				<Settings class="size-5" />
 			</Button>
 		{/snippet}
 	</Sheet.Trigger>
