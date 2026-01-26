@@ -1,429 +1,679 @@
 <script lang="ts">
-	import * as Tabs from '$lib/components/ui/tabs';
-	import { Input } from '$lib/components/ui/input';
+	import { scrapeUrl, crawlUrl, searchWeb, getCrawlStatus } from '$lib/remote/cinder.remote';
 	import { Button } from '$lib/components/ui/button';
-	import { Label } from '$lib/components/ui/label';
-	import { Progress } from '$lib/components/ui/progress';
-	import { ScrollArea } from '$lib/components/ui/scroll-area';
-	import * as Card from '$lib/components/ui/card';
-
-	import { scrapeUrl, crawlUrl, searchWeb, getCrawlStatus } from '../../remote/cinder.remote';
+	import { Input } from '$lib/components/ui/input';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
+	import {
+		Search,
+		Globe,
+		Layers,
+		History,
+		ExternalLink,
+		Loader2,
+		AlertCircle,
+		Trash2,
+		Copy,
+		ArrowRight,
+		Clock
+	} from '@lucide/svelte';
 	import CodeViewer from '$lib/components/blocks/code-viewer.svelte';
 	import ResultCard from '$lib/components/blocks/result-card.svelte';
 	import OptionsSheet from '$lib/components/blocks/options-sheet.svelte';
-	import { Loader2, History, Trash2 } from '@lucide/svelte';
+	import { cn } from '$lib/utils';
 	import { PersistedState } from 'runed';
-	import superjson from 'superjson';
 
-	// Types
-	interface SearchHistoryItem {
+	// Local State
+	let crawlId = $state<string | null>(null);
+	let activeTab = $state('scrape');
+	let sidebarOpen = $state(true);
+
+	// Error States
+	let scrapeError = $state<string | null>(null);
+	let crawlError = $state<string | null>(null);
+	let searchError = $state<string | null>(null);
+
+	// Derived query for crawl status
+	const statusQuery = $derived(crawlId ? getCrawlStatus(crawlId) : null);
+
+	// History Management
+	type HistoryItem = {
 		id: string;
-		query: string;
-		timestamp: Date;
-		results: any[];
+		type: 'scrape' | 'crawl' | 'search';
+		title: string;
+		url: string;
+		timestamp: string;
+	};
+	const searchHistory = new PersistedState<HistoryItem[]>('cinder-history', []);
+
+	function addToHistory(item: HistoryItem) {
+		searchHistory.current = [item, ...searchHistory.current.slice(0, 19)];
 	}
 
-	// Persisted state for search history
-	const searchHistory = new PersistedState<SearchHistoryItem[]>('cinder-search-history', [], {
-		serializer: {
-			serialize: superjson.stringify,
-			deserialize: superjson.parse
-		}
-	});
+	function clearHistory() {
+		searchHistory.current = [];
+	}
 
-	let activeTab = $state('scrape');
-
-	// Scrape Form
-	let scrapeSubmitting = $state(false);
-	let scrapeError = $state<string | null>(null);
-
-	const scrapeEnhance = scrapeUrl.enhance(async ({ submit }) => {
-		scrapeSubmitting = true;
-		scrapeError = null;
-		try {
-			await submit();
-		} catch (e: any) {
-			scrapeError = e.message || 'An error occurred';
-		} finally {
-			scrapeSubmitting = false;
-		}
-	});
-
-	// Crawl Form
-	let crawlId = $state('');
-	let crawlSubmitting = $state(false);
-	let crawlError = $state<string | null>(null);
-	let crawlStatus = $derived(crawlId ? getCrawlStatus(crawlId) : null);
-
-	const crawlEnhance = crawlUrl.enhance(async ({ submit }) => {
-		crawlSubmitting = true;
-		crawlError = null;
-		try {
-			await submit();
-		} catch (e: any) {
-			crawlError = e.message || 'An error occurred';
-		} finally {
-			crawlSubmitting = false;
-		}
-	});
-
+	// Polling for crawl status
 	$effect(() => {
-		if (crawlUrl.result && (crawlUrl.result as any).id) {
-			crawlId = (crawlUrl.result as any).id;
-		}
-	});
-
-	$effect(() => {
-		if (crawlId && crawlStatus) {
+		if (crawlId && activeTab === 'crawl' && statusQuery) {
 			const interval = setInterval(() => {
-				// @ts-ignore
-				if (crawlStatus.refresh) crawlStatus.refresh();
-			}, 2000);
+				statusQuery.refresh();
+			}, 3000);
 			return () => clearInterval(interval);
 		}
 	});
 
-	// Search Form
-	let searchSubmitting = $state(false);
-	let searchError = $state<string | null>(null);
-	let historicalResults = $state<any[] | null>(null);
-
-	const searchEnhance = searchWeb.enhance(async ({ submit }) => {
-		searchSubmitting = true;
-		searchError = null;
-		historicalResults = null; // Clear historical results when doing new search
-		try {
-			// Get the query value before submit
-			const queryValue = searchWeb.fields.query.value();
-			await submit();
-			// After successful submit, save to history
-			if (searchWeb.result && queryValue) {
-				const newItem: SearchHistoryItem = {
-					id: crypto.randomUUID(),
-					query: queryValue,
-					timestamp: new Date(),
-					results: searchWeb.result
-				};
-				// Add to beginning of history, keep only last 10
-				searchHistory.current = [newItem, ...searchHistory.current.slice(0, 9)];
-			}
-		} catch (e: any) {
-			searchError = e.message || 'An error occurred';
-		} finally {
-			searchSubmitting = false;
-		}
-	});
-
-	// Load previous search
-	function loadPreviousSearch(item: SearchHistoryItem) {
-		// Display the historical results
-		historicalResults = item.results;
-		// Clear any current search error
-		searchError = null;
-	}
-
-	// Clear search history
-	function clearSearchHistory() {
-		searchHistory.current = [];
-	}
-
-	// Remove single history item
-	function removeHistoryItem(id: string) {
-		searchHistory.current = searchHistory.current.filter((item) => item.id !== id);
-	}
+	// Derived states
+	let crawlProgress = $derived(statusQuery?.current?.status === 'completed' ? 100 : 50);
+	let isCurrentlyLoading = $derived(
+		!!scrapeUrl.pending ||
+			!!crawlUrl.pending ||
+			!!searchWeb.pending ||
+			(!!statusQuery?.loading && !!crawlId)
+	);
 </script>
 
-<div class="container mx-auto flex h-[calc(100vh-4rem)] max-w-6xl flex-col py-6">
-	<div class="mb-6">
-		<h1 class="mb-2 text-3xl font-bold tracking-tight">Cinder Playground</h1>
-		<p class="text-muted-foreground">
-			Interact with Cinder's Scrape, Crawl, and Search capabilities.
-		</p>
-	</div>
-
-	<Tabs.Root
-		value={activeTab}
-		onValueChange={(v) => (activeTab = v)}
-		class="flex min-h-0 flex-1 flex-col"
-	>
-		<Tabs.List class="mb-4 grid w-full max-w-100 grid-cols-3">
-			<Tabs.Trigger value="scrape">Scrape</Tabs.Trigger>
-			<Tabs.Trigger value="crawl">Crawl</Tabs.Trigger>
-			<Tabs.Trigger value="search">Search</Tabs.Trigger>
-		</Tabs.List>
-
-		<!-- SCRAPE TAB -->
-		<Tabs.Content value="scrape" class="mt-0 flex min-h-0 flex-1 flex-col gap-4">
-			<Card.Root class="p-6">
-				<form {...scrapeEnhance} class="flex items-end gap-4">
-					<div class="flex-1 space-y-2">
-						<Label>URL</Label>
-						<div class="flex gap-2">
-							<Input
-								{...scrapeUrl.fields.url.as('text')}
-								placeholder="https://example.com"
-								class="flex-1"
-							/>
-							<OptionsSheet fields={scrapeUrl.fields} />
-						</div>
-						{#each scrapeUrl.fields.url.issues() as issue}
-							<p class="text-xs text-destructive">{issue.message}</p>
-						{/each}
-					</div>
-					<Button type="submit" disabled={scrapeSubmitting}>
-						{#if scrapeSubmitting}
-							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-						{/if}
-						Run Scrape
-					</Button>
-				</form>
-			</Card.Root>
-
-			<div class="min-h-0 flex-1">
-				{#if scrapeUrl.result}
-					<CodeViewer result={scrapeUrl.result} />
-				{:else if scrapeError}
-					<div
-						class="rounded-md border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+<div class="flex h-[calc(100vh-4rem)] overflow-hidden bg-background">
+	<!-- History Sidebar -->
+	{#if sidebarOpen}
+		<aside class=" hidden w-80 flex-col border-r bg-muted/30 lg:flex">
+			<div class="flex items-center justify-between border-b bg-background/50 p-4 backdrop-blur">
+				<div class="flex items-center gap-2">
+					<History class="size-4 text-muted-foreground" />
+					<h2 class="text-sm font-semibold">History</h2>
+				</div>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="size-7"
+					onclick={() => clearHistory()}
+					title="Clear history"
+				>
+					<Trash2 class="size-3.5" />
+				</Button>
+			</div>
+			<div class="flex-1 space-y-2 overflow-y-auto p-3">
+				{#each searchHistory.current as item (item.id)}
+					<button
+						class="group relative w-full rounded-lg border bg-background p-2.5 text-left transition-all hover:border-primary/50"
+						onclick={() => {
+							if (item.type === 'scrape') activeTab = 'scrape';
+							else if (item.type === 'crawl') activeTab = 'crawl';
+						}}
 					>
-						Error: {scrapeError}
-					</div>
+						<div class="mb-1 flex items-center gap-2">
+							{#if item.type === 'scrape'}<Globe class="size-3 text-blue-400" />
+							{:else if item.type === 'crawl'}<Layers class="size-3 text-amber-400" />
+							{:else}<Search class="size-3 text-primary" />
+							{/if}
+							<span class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+								{item.type}
+							</span>
+						</div>
+						<div class="truncate pr-4 text-xs font-medium">{item.title}</div>
+						<div class="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+							<Clock class="size-2.5" />
+							{new Date(item.timestamp).toLocaleTimeString([], {
+								hour: '2-digit',
+								minute: '2-digit'
+							})}
+						</div>
+					</button>
 				{:else}
 					<div
-						class="flex h-full items-center justify-center rounded-lg border-2 border-dashed text-muted-foreground"
+						class="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50"
 					>
-						Enter a URL to see the scrape result.
+						<History class="size-8 mb-2 stroke-[1px]" />
+						<p class="text-xs">No history yet</p>
 					</div>
-				{/if}
+				{/each}
 			</div>
-		</Tabs.Content>
+		</aside>
+	{/if}
 
-		<!-- CRAWL TAB -->
-		<Tabs.Content value="crawl" class="mt-0 flex min-h-0 flex-1 flex-col gap-4">
-			<Card.Root class="p-6">
-				<form {...crawlEnhance} class="flex items-end gap-4">
-					<div class="flex-1 space-y-2">
-						<Label>Base URL</Label>
-						<Input {...crawlUrl.fields.url.as('text')} placeholder="https://example.com" />
-						{#each crawlUrl.fields.url.issues() as issue}
-							<p class="text-xs text-destructive">{issue.message}</p>
-						{/each}
-					</div>
-					<div class="w-32 space-y-2">
-						<Label>Max Depth</Label>
-						<Input {...crawlUrl.fields.maxDepth.as('number')} placeholder="2" />
-					</div>
-					<Button type="submit" disabled={crawlSubmitting}>
-						{#if crawlSubmitting}
-							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-						{/if}
-						Start Crawl
+	<!-- Main Workbench Area -->
+	<main class="flex-1 overflow-x-hidden overflow-y-auto">
+		<div class="mx-auto max-w-6xl space-y-8 p-6">
+			<div class="flex flex-col justify-between gap-4 border-b pb-6 md:flex-row md:items-end">
+				<div>
+					<h1 class="mb-1 text-3xl font-bold tracking-tight">Workbench</h1>
+					<p class="text-muted-foreground">
+						Master the web with precision crawling and extraction.
+					</p>
+				</div>
+				<div class="flex items-center gap-2">
+					<Button variant="outline" size="sm" onclick={() => (sidebarOpen = !sidebarOpen)}>
+						<History class="mr-2 size-4" />
+						{sidebarOpen ? 'Hide History' : 'Show History'}
 					</Button>
-				</form>
-			</Card.Root>
+					<div
+						class="flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1.5 text-[10px] font-medium"
+					>
+						<div
+							class={cn(
+								'size-2 rounded-full',
+								isCurrentlyLoading ? 'animate-pulse bg-primary' : 'bg-emerald-500'
+							)}
+						></div>
+						{isCurrentlyLoading ? 'Processing' : 'System Ready'}
+					</div>
+				</div>
+			</div>
 
-			<div class="flex min-h-0 flex-1 flex-col gap-4">
-				{#if crawlId}
-					{#await crawlStatus}
-						<div class="flex items-center gap-2 p-4 text-muted-foreground">
-							<Loader2 class="h-4 w-4 animate-spin" /> Connecting to job {crawlId}...
-						</div>
-					{:then status}
-						<Card.Root class="flex min-h-0 flex-1 flex-col border-0 bg-muted/50 shadow-none">
-							<div
-								class="flex items-center justify-between border-b bg-background/50 px-4 py-2 backdrop-blur"
+			<Tabs bind:value={activeTab} class="w-full">
+				<TabsList class="mb-8 grid w-full max-w-md grid-cols-3">
+					<TabsTrigger value="scrape" class="gap-2">
+						<Globe class="size-4" />
+						Scrape
+					</TabsTrigger>
+					<TabsTrigger value="crawl" class="gap-2">
+						<Layers class="size-4" />
+						Crawl
+					</TabsTrigger>
+					<TabsTrigger value="search" class="gap-2">
+						<Search class="size-4" />
+						Search
+					</TabsTrigger>
+				</TabsList>
+
+				<!-- Scrape Tab Content -->
+				<TabsContent value="scrape" class="space-y-6 focus-visible:outline-none">
+					<section class="overflow-hidden rounded-xl border bg-card/50 shadow-sm backdrop-blur-sm">
+						<div class="p-6">
+							<form
+								{...scrapeUrl.enhance(async ({ submit }) => {
+									scrapeError = null;
+									try {
+										await submit();
+										if (scrapeUrl.result) {
+											addToHistory({
+												id: crypto.randomUUID(),
+												type: 'scrape',
+												title: (scrapeUrl.result as any).metadata?.title || 'Scraped Page',
+												url: (scrapeUrl.result as any).url || 'Unknown',
+												timestamp: new Date().toISOString()
+											});
+										}
+									} catch (e: any) {
+										scrapeError = e.message || 'An unexpected error occurred';
+									}
+								})}
+								class="space-y-4"
 							>
-								<div class="space-y-1">
-									<h3 class="text-sm font-medium">Job {crawlId}</h3>
-									<div class="flex items-center gap-2 text-xs text-muted-foreground">
-										<span class="capitalize">{status?.status || 'Unknown'}</span>
-										<span>•</span>
-										<span>{status?.completed || 0} / {status?.total || '?'} pages</span>
-									</div>
-								</div>
-								<Button
-									variant="outline"
-									size="sm"
-									class="h-8 text-xs"
-									onclick={() => getCrawlStatus(crawlId).refresh()}
-								>
-									Refresh
-								</Button>
-							</div>
-
-							<div class="bg-background/50 px-4 py-1">
-								<Progress
-									value={((status?.completed || 0) / (status?.total || 1)) * 100}
-									class="h-1"
-								/>
-							</div>
-
-							<ScrollArea class="flex-1 p-4">
-								<div class="space-y-2">
-									{#each status?.data || [] as page}
-										<div
-											class="flex items-start justify-between rounded-lg border bg-card p-3 transition-colors hover:border-primary/50"
-										>
-											<div class="mr-4 min-w-0 flex-1">
-												<a
-													href={page.url}
-													target="_blank"
-													class="block truncate text-sm font-medium hover:underline"
-													>{page.metadata?.title || page.url}</a
-												>
-												<p class="truncate text-xs text-muted-foreground">{page.url}</p>
-											</div>
-											{#if page.markdown}
-												<Button variant="secondary" size="sm" class="h-7 text-xs">MD</Button>
-											{/if}
+								<div class="flex flex-col gap-2">
+									<label
+										for="scrape-url"
+										class="pl-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+									>
+										Target URL
+									</label>
+									<div class="flex gap-2">
+										<div class="relative flex-1">
+											<Globe
+												class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+											/>
+											<Input
+												id="scrape-url"
+												{...scrapeUrl.fields.url.as('text')}
+												placeholder="https://example.com/article"
+												class="h-11 bg-background pl-10"
+												aria-invalid={(scrapeUrl.fields.url?.issues()?.length || 0) > 0}
+											/>
 										</div>
+										<OptionsSheet fields={scrapeUrl.fields} />
+										<Button
+											type="submit"
+											disabled={!!scrapeUrl.pending}
+											class="h-11 px-8 shadow-md"
+										>
+											{#if scrapeUrl.pending}
+												<Loader2 class="mr-2 size-4 animate-spin" />
+												Extracting...
+											{:else}
+												Scrape
+												<ArrowRight class="ml-2 size-4" />
+											{/if}
+										</Button>
+									</div>
+									{#each scrapeUrl.fields.url?.issues() || [] as issue (issue.message)}
+										<p class="mt-1 flex items-center gap-1.5 pl-1 text-xs text-destructive">
+											<AlertCircle class="size-3" />
+											{issue.message}
+										</p>
 									{/each}
 								</div>
-							</ScrollArea>
-						</Card.Root>
-					{:catch err}
-						<div class="p-4 text-destructive">Error loading status: {err.message}</div>
-					{/await}
-				{:else if crawlError}
-					<div
-						class="rounded-md border border-destructive/20 bg-destructive/10 p-4 text-destructive"
-					>
-						Error: {crawlError}
-					</div>
-				{:else}
-					<div
-						class="flex h-full items-center justify-center rounded-lg border-2 border-dashed text-muted-foreground"
-					>
-						Start a crawl job to see progress.
-					</div>
-				{/if}
-			</div>
-		</Tabs.Content>
-
-		<!-- SEARCH TAB -->
-		<Tabs.Content value="search" class="mt-0 flex min-h-0 flex-1 flex-col gap-4">
-			<Card.Root class="p-6">
-				<form {...searchEnhance} class="flex items-end gap-4">
-					<div class="flex-1 space-y-2">
-						<Label>Search Query</Label>
-						<div class="flex gap-2">
-							<Input
-								{...searchWeb.fields.query.as('text')}
-								placeholder="e.g. 'cinder docs'"
-								class="flex-1"
-							/>
-							<OptionsSheet fields={searchWeb.fields} />
+							</form>
 						</div>
-						{#each searchWeb.fields.query.issues() as issue}
-							<p class="text-xs text-destructive">{issue.message}</p>
-						{/each}
-					</div>
-					<Button type="submit" disabled={searchSubmitting}>
-						{#if searchSubmitting}
-							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-						{/if}
-						Search
-					</Button>
-				</form>
-			</Card.Root>
 
-			<!-- Search History -->
-			{#if searchHistory.current.length > 0}
-				<Card.Root class="border-amber-200/50 bg-linear-to-br from-amber-50/50 to-transparent">
-					<Card.Header class="pb-3">
-						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-2">
-								<History class="h-4 w-4 text-amber-600" />
-								<Card.Title class="text-base">Recent Searches</Card.Title>
-								<span class="text-xs text-muted-foreground">({searchHistory.current.length})</span>
+						<div
+							class="flex items-center justify-between border-t bg-muted/10 p-4 px-6 text-[11px] font-medium text-muted-foreground"
+						>
+							<div class="flex items-center gap-4">
+								<span class="flex items-center gap-1.5"
+									><Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase"
+										>Format</Badge
+									> Markdown</span
+								>
+								<span class="flex items-center gap-1.5"
+									><Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase"
+										>Engine</Badge
+									> Firecrawl v1</span
+								>
 							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								class="h-8 text-xs text-muted-foreground hover:text-destructive"
-								onclick={clearSearchHistory}
-							>
-								<Trash2 class="mr-1 h-3 w-3" />
-								Clear
-							</Button>
+							<span>Ready for extraction</span>
 						</div>
-					</Card.Header>
-					<Card.Content>
-						<ScrollArea class="h-40 pr-4">
-							<div class="space-y-2">
-								{#each searchHistory.current as item}
-									<button
-										class="group flex w-full items-center justify-between rounded-md border border-transparent bg-card px-3 py-2 text-left transition-all hover:border-amber-200 hover:bg-amber-50/50"
-										onclick={() => loadPreviousSearch(item)}
-									>
-										<div class="min-w-0 flex-1">
-											<p class="truncate text-sm font-medium group-hover:text-amber-900">
-												{item.query}
-											</p>
-											<p class="text-xs text-muted-foreground">
-												{item.timestamp.toLocaleString()} · {item.results.length}
-												{item.results.length === 1 ? 'result' : 'results'}
-											</p>
-										</div>
+					</section>
+
+					<!-- Results -->
+					{#if scrapeUrl.pending}
+						<div
+							class="flex animate-in flex-col items-center justify-center space-y-4 rounded-xl border border-dashed bg-muted/20 p-20 duration-500 fade-in"
+						>
+							<div class="relative">
+								<div class="absolute inset-0 animate-ping rounded-full bg-primary/20"></div>
+								<div class="relative rounded-full bg-primary p-4">
+									<Globe class="size-8 text-primary-foreground" />
+								</div>
+							</div>
+							<div class="text-center">
+								<h3 class="text-lg font-semibold">Deep Extraction in Progress</h3>
+								<p class="text-sm text-muted-foreground">
+									Navigating, rendering JavaScript, and refining content...
+								</p>
+							</div>
+						</div>
+					{:else if scrapeError}
+						<div
+							class="flex animate-in gap-4 rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-destructive slide-in-from-top-2"
+						>
+							<AlertCircle class="size-6 shrink-0" />
+							<div>
+								<h3 class="mb-1 font-bold">Extraction Failed</h3>
+								<p class="text-sm opacity-90">{scrapeError}</p>
+							</div>
+						</div>
+					{:else if scrapeUrl.result}
+						<div class="grid animate-in grid-cols-1 gap-6 duration-700 fade-in lg:grid-cols-3">
+							<div class="space-y-6 lg:col-span-1">
+								<ResultCard result={scrapeUrl.result} />
+								<div class="space-y-4 rounded-xl border bg-card p-5">
+									<h3 class="flex items-center gap-2 text-sm font-semibold">
+										<Layers class="size-4 text-primary" />
+										Quick Actions
+									</h3>
+									<div class="grid grid-cols-2 gap-2">
 										<Button
-											variant="ghost"
+											variant="outline"
 											size="sm"
-											class="h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100"
-											onclick={(e) => {
-												e.stopPropagation();
-												removeHistoryItem(item.id);
+											class="h-9 text-[11px] font-bold"
+											onclick={() => {
+												if (scrapeUrl.result)
+													navigator.clipboard.writeText(JSON.stringify(scrapeUrl.result, null, 2));
 											}}
 										>
-											<Trash2 class="h-3 w-3 text-muted-foreground" />
+											<Copy class="mr-2 size-3" /> JSON
 										</Button>
-									</button>
-								{/each}
+										<Button
+											variant="outline"
+											size="sm"
+											class="h-9 text-[11px] font-bold"
+											onclick={() => {
+												const result = scrapeUrl.result as any;
+												if (result?.markdown) navigator.clipboard.writeText(result.markdown);
+											}}
+										>
+											<Copy class="mr-2 size-3" /> MD
+										</Button>
+									</div>
+								</div>
 							</div>
-						</ScrollArea>
-					</Card.Content>
-				</Card.Root>
-			{/if}
+							<div class="lg:col-span-2">
+								<CodeViewer result={scrapeUrl.result} />
+							</div>
+						</div>
+					{:else}
+						<div
+							class="flex flex-col items-center justify-center rounded-xl border border-dashed bg-muted/10 p-20 opacity-60"
+						>
+							<Globe class="mb-4 size-12 stroke-[1px] text-muted-foreground" />
+							<p class="text-sm font-medium">Enter a URL above to begin extraction</p>
+						</div>
+					{/if}
+				</TabsContent>
 
-			<div class="flex min-h-0 flex-1 flex-col gap-4">
-				<Card.Root class="flex min-h-0 flex-1 flex-col border-0 bg-muted/30 shadow-sm">
-					<Card.Header class="border-b bg-background/50 pb-3 backdrop-blur">
-						<Card.Title class="text-sm font-medium">
-							{#if searchWeb.result || historicalResults}
-								{(searchWeb.result || historicalResults)?.length || 0}
-								{(searchWeb.result || historicalResults)?.length === 1 ? 'Result' : 'Results'}
-							{:else}
-								Search Results
-							{/if}
-						</Card.Title>
-					</Card.Header>
-					<Card.Content class="flex min-h-0 flex-1 overflow-hidden p-0">
-						{#if searchWeb.result || historicalResults}
-							<ScrollArea class="h-full w-full">
-								<div class="grid gap-4 p-4 pb-4">
-									{#each searchWeb.result || historicalResults as item}
-										<ResultCard result={item} />
+				<!-- Crawl Tab Content -->
+				<TabsContent value="crawl" class="space-y-6 focus-visible:outline-none">
+					<section class="overflow-hidden rounded-xl border bg-card/50 shadow-sm backdrop-blur-sm">
+						<div class="p-6">
+							<form
+								{...crawlUrl.enhance(async ({ submit }) => {
+									crawlError = null;
+									try {
+										await submit();
+										const result = crawlUrl.result as any;
+										if (result?.id) {
+											crawlId = result.id;
+											addToHistory({
+												id: crypto.randomUUID(),
+												type: 'crawl',
+												title: `Crawl: ${result.id}`,
+												url: 'Crawl Job',
+												timestamp: new Date().toISOString()
+											});
+										}
+									} catch (e: any) {
+										crawlError = e.message || 'An unexpected error occurred';
+									}
+								})}
+								class="space-y-4"
+							>
+								<div class="flex flex-col gap-2">
+									<label
+										for="crawl-url"
+										class="pl-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+									>
+										Crawl Boundary (Sitemap/Domain)
+									</label>
+									<div class="flex gap-2">
+										<div class="relative flex-1">
+											<Layers
+												class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+											/>
+											<Input
+												id="crawl-url"
+												{...crawlUrl.fields.url.as('text')}
+												placeholder="https://example.com/*"
+												class="h-11 bg-background pl-10"
+												aria-invalid={(crawlUrl.fields.url?.issues()?.length || 0) > 0}
+											/>
+										</div>
+										<OptionsSheet fields={crawlUrl.fields} />
+										<Button type="submit" disabled={!!crawlUrl.pending} class="h-11 px-8 shadow-md">
+											{#if crawlUrl.pending}
+												<Loader2 class="mr-2 size-4 animate-spin" />
+												Initializing...
+											{:else}
+												Start Crawl
+												<Layers class="ml-2 size-4" />
+											{/if}
+										</Button>
+									</div>
+									{#each crawlUrl.fields.url?.issues() || [] as issue (issue.message)}
+										<p class="mt-1 flex items-center gap-1.5 pl-1 text-xs text-destructive">
+											<AlertCircle class="size-3" />
+											{issue.message}
+										</p>
 									{/each}
 								</div>
-							</ScrollArea>
-						{:else if searchError}
-							<div class="flex w-full items-center justify-center p-8">
-								<div
-									class="max-w-sm rounded-md border border-destructive/30 bg-destructive/5 p-4 text-center text-destructive"
+							</form>
+						</div>
+						<div
+							class="flex items-center justify-between border-t bg-muted/10 p-4 px-6 text-[11px] font-medium text-muted-foreground"
+						>
+							<div class="flex items-center gap-4">
+								<span class="flex items-center gap-1.5 text-amber-500">
+									<span class="size-1.5 animate-pulse rounded-full bg-amber-500"></span>
+									Max Depth: 2
+								</span>
+								<span class="flex items-center gap-1.5">Limit: 100 pages</span>
+							</div>
+							<span>Crawl engine idle</span>
+						</div>
+					</section>
+
+					{#if crawlId}
+						<div class="animate-in space-y-6 duration-500 fade-in">
+							<div class="rounded-xl border bg-card p-6 shadow-sm">
+								<div class="mb-6 flex items-center justify-between">
+									<div class="flex items-center gap-3">
+										<div class="flex size-10 items-center justify-center rounded-lg bg-amber-100">
+											<Layers class="size-5 text-amber-600" />
+										</div>
+										<div>
+											<h3 class="font-bold">Active Crawl Mission</h3>
+											<p class="font-mono text-xs tracking-tighter text-muted-foreground uppercase">
+												ID: {crawlId}
+											</p>
+										</div>
+									</div>
+									<Badge
+										class={cn(
+											'px-3 py-1',
+											statusQuery?.current?.status === 'completed'
+												? 'bg-emerald-500 hover:bg-emerald-600'
+												: 'animate-pulse bg-amber-500'
+										)}
+									>
+										{statusQuery?.current?.status || 'Processing'}
+									</Badge>
+								</div>
+
+								<div class="space-y-3">
+									<div class="mb-1 flex justify-between text-xs font-bold">
+										<span>Crawl Progress</span>
+										<span>{(statusQuery?.current as any)?.data?.length || 0} Pages Found</span>
+									</div>
+									<div class="h-2 w-full overflow-hidden rounded-full border bg-muted">
+										<div
+											class="h-full bg-amber-500 transition-all duration-500 w-[{crawlProgress}%]"
+										></div>
+									</div>
+									<p class="text-[10px] text-muted-foreground italic">
+										Current Mission: Discovery and content extraction on {crawlUrl.fields.url.value() ||
+											'target'}
+									</p>
+								</div>
+							</div>
+
+							{#if (statusQuery?.current as any)?.data}
+								<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+									{#each (statusQuery?.current as any).data as page (page.url)}
+										<div
+											class="group rounded-xl border border-l-4 border-l-amber-500/30 bg-card p-4 transition-all hover:shadow-md"
+										>
+											<div
+												class="mb-3 line-clamp-2 min-h-8 truncate pr-4 text-xs leading-relaxed font-medium"
+											>
+												{page.title || 'Untitled Page'}
+											</div>
+											<div class="flex items-center justify-between">
+												<span
+													class="max-w-37.5 truncate font-mono text-[10px] text-muted-foreground"
+													>{page.url}</span
+												>
+												<Button
+													variant="ghost"
+													size="icon"
+													class="size-7 opacity-0 transition-opacity group-hover:opacity-100"
+													onclick={() => window.open(page.url, '_blank')}
+												>
+													<ExternalLink class="size-3.5" />
+												</Button>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{:else if crawlError}
+						<div
+							class="flex animate-in gap-4 rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-destructive slide-in-from-top-2"
+						>
+							<AlertCircle class="size-6 shrink-0" />
+							<div>
+								<h3 class="mb-1 font-bold">Crawl Failed</h3>
+								<p class="text-sm opacity-90">{crawlError}</p>
+							</div>
+						</div>
+					{:else}
+						<div
+							class="flex flex-col items-center justify-center rounded-xl border border-dashed bg-muted/10 p-20 opacity-60"
+						>
+							<Layers class="mb-4 size-12 stroke-[1px] text-muted-foreground" />
+							<p class="text-center text-sm font-medium">
+								Define a boundary to start a massive discovery mission.<br /><span
+									class="text-xs font-normal opacity-70"
+									>Sitemap exploration and recursive discovery.</span
 								>
-									<p class="mb-2 font-medium">Search Error</p>
-									<p class="text-sm">{searchError}</p>
+							</p>
+						</div>
+					{/if}
+				</TabsContent>
+
+				<!-- Search Tab Content -->
+				<TabsContent value="search" class="space-y-6 focus-visible:outline-none">
+					<section class="overflow-hidden rounded-xl border bg-card/50 shadow-sm backdrop-blur-sm">
+						<div class="p-6">
+							<form
+								{...searchWeb.enhance(async ({ submit }) => {
+									searchError = null;
+									try {
+										await submit();
+										const result = searchWeb.result as any[];
+										if (result?.length) {
+											addToHistory({
+												id: crypto.randomUUID(),
+												type: 'search',
+												title: `Search: ${result.length} results`,
+												url: 'Search Results',
+												timestamp: new Date().toISOString()
+											});
+										}
+									} catch (e: any) {
+										searchError = e.message || 'An unexpected error occurred';
+									}
+								})}
+								class="space-y-4"
+							>
+								<div class="flex flex-col gap-2">
+									<label
+										for="search-query"
+										class="pl-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+									>
+										Search Intent
+									</label>
+									<div class="flex gap-2">
+										<div class="relative flex-1">
+											<Search
+												class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+											/>
+											<Input
+												id="search-query"
+												{...searchWeb.fields.query.as('text')}
+												placeholder="e.g. 'latest openai news' or 'technical documentation for svelte 5'"
+												class="h-11 bg-background pl-10"
+												aria-invalid={(searchWeb.fields.query?.issues()?.length || 0) > 0}
+											/>
+										</div>
+										<Button
+											type="submit"
+											disabled={!!searchWeb.pending}
+											class="h-11 px-8 shadow-md"
+										>
+											{#if searchWeb.pending}
+												<Loader2 class="mr-2 size-4 animate-spin" />
+												Searching...
+											{:else}
+												Search
+												<ArrowRight class="ml-2 size-4" />
+											{/if}
+										</Button>
+									</div>
+									{#each searchWeb.fields.query?.issues() || [] as issue (issue.message)}
+										<p class="mt-1 flex items-center gap-1.5 pl-1 text-xs text-destructive">
+											<AlertCircle class="size-3" />
+											{issue.message}
+										</p>
+									{/each}
 								</div>
+							</form>
+						</div>
+						<div
+							class="flex items-center justify-between border-t bg-muted/10 p-4 px-6 text-[11px] font-medium text-muted-foreground"
+						>
+							<div class="flex items-center gap-4">
+								<span class="flex items-center gap-1.5">
+									<Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase"
+										>Engine</Badge
+									> Search API
+								</span>
+								<span class="flex items-center gap-1.5">Mode: Semantic Discovery</span>
 							</div>
-						{:else}
-							<div class="flex w-full items-center justify-center">
-								<div class="text-center text-muted-foreground">
-									<p class="text-sm">Enter a search query above to get started</p>
+							<span>Search systems active</span>
+						</div>
+					</section>
+
+					{#if searchWeb.pending}
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+							{#each Array(6) as _, i (i)}
+								<div
+									class="flex h-32 animate-pulse flex-col justify-between rounded-xl border bg-card/40 p-4"
+								>
+									<div class="space-y-2">
+										<div class="h-4 w-3/4 rounded bg-muted"></div>
+										<div class="h-3 w-full rounded bg-muted"></div>
+									</div>
+									<div class="h-3 w-1/2 rounded bg-muted"></div>
 								</div>
+							{/each}
+						</div>
+					{:else if searchError}
+						<div
+							class="flex animate-in gap-4 rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-destructive slide-in-from-top-2"
+						>
+							<AlertCircle class="size-6 shrink-0" />
+							<div>
+								<h3 class="mb-1 font-bold">Search Missed</h3>
+								<p class="text-sm opacity-90">{searchError}</p>
 							</div>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-			</div>
-		</Tabs.Content>
-	</Tabs.Root>
+						</div>
+					{:else if searchWeb.result}
+						<div
+							class="grid animate-in grid-cols-1 gap-4 duration-500 slide-in-from-bottom-4 md:grid-cols-2 lg:grid-cols-3"
+						>
+							{#each searchWeb.result as any[] as item (item.url)}
+								<div
+									class="group flex flex-col justify-between rounded-xl border bg-card p-4 transition-all hover:border-primary/50 hover:shadow-lg"
+								>
+									<div>
+										<h4
+											class="mb-2 line-clamp-2 text-sm leading-snug font-bold transition-colors group-hover:text-primary"
+										>
+											{item.title}
+										</h4>
+										<p class="mb-4 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+											{item.description || 'No description provided.'}
+										</p>
+									</div>
+									<div class="mt-auto flex items-center justify-between border-t pt-3">
+										<span class="max-w-30 truncate font-mono text-[10px] text-muted-foreground"
+											>{new URL(item.url || 'http://localhost').hostname}</span
+										>
+										<Button
+											variant="ghost"
+											size="icon"
+											class="size-7"
+											onclick={() => window.open(item.url, '_blank')}
+										>
+											<ExternalLink class="size-3.5" />
+										</Button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<div
+							class="flex flex-col items-center justify-center rounded-xl border border-dashed bg-muted/10 p-20 opacity-60"
+						>
+							<Search class="mb-4 size-12 stroke-[1px] text-muted-foreground" />
+							<p class="text-sm font-medium">
+								Search across the entire indexed web with AI precision
+							</p>
+						</div>
+					{/if}
+				</TabsContent>
+			</Tabs>
+		</div>
+	</main>
 </div>
