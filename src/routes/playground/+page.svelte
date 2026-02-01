@@ -88,6 +88,18 @@
 			!!searchWeb.pending ||
 			(!!statusQuery?.loading && !!crawlId)
 	);
+
+	async function handleScrape(url: string) {
+		activeTab = 'scrape';
+		// Wait for tab switch and DOM update
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const input = document.getElementById('scrape-url') as HTMLInputElement;
+		if (input) {
+			input.value = url;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+	}
 </script>
 
 {#snippet historyContent()}
@@ -712,6 +724,15 @@
 											<ExternalLink class="size-3.5" />
 										</Button>
 									</div>
+									<Button
+										variant="secondary"
+										size="sm"
+										class="mt-2 w-full text-[10px] font-medium"
+										onclick={() => handleScrape(item.url)}
+									>
+										<Globe class="mr-2 size-3" />
+										Scrape This
+									</Button>
 								</div>
 							{/each}
 						</div>
