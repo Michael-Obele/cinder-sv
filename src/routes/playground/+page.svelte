@@ -24,6 +24,7 @@
 	import OptionsSheet from '$lib/components/blocks/options-sheet.svelte';
 	import { cn } from '$lib/utils';
 	import { PersistedState } from 'runed';
+	import { tick } from 'svelte';
 
 	// Local State
 	const isMobile = new IsMobile();
@@ -92,7 +93,7 @@
 	async function handleScrape(url: string) {
 		activeTab = 'scrape';
 		// Wait for tab switch and DOM update
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await tick();
 
 		const input = document.getElementById('scrape-url') as HTMLInputElement;
 		if (input) {
