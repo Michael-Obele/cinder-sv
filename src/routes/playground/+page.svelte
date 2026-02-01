@@ -600,7 +600,7 @@
 											addToHistory({
 												id: crypto.randomUUID(),
 												type: 'search',
-												title: `Search: ${result.length} results`,
+												title: `Search: ${searchWeb.fields.query.value()}`,
 												url: 'Search Results',
 												timestamp: new Date().toISOString(),
 												data: result
