@@ -113,5 +113,5 @@ export const getCrawlStatus = query(
 // 3. Search
 export const searchWeb = form(SearchOptionsSchema, async (data) => {
 	const result = await fetchCinder('/v1/search', 'POST', data);
-	return result;
+	return result.results;
 });

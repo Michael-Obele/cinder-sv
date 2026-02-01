@@ -685,7 +685,7 @@
 						<div
 							class="grid animate-in grid-cols-1 gap-4 duration-500 slide-in-from-bottom-4 md:grid-cols-2 lg:grid-cols-3"
 						>
-							{#each displayedSearchResult as any[] as item (item.url)}
+							{#each (displayedSearchResult as any[]) || [] as item (item.url)}
 								<div
 									class="group flex flex-col justify-between rounded-xl border bg-card p-4 transition-all hover:border-primary/50 hover:shadow-lg"
 								>
