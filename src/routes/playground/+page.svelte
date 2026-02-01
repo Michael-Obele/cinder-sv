@@ -607,7 +607,7 @@
 											});
 										}
 									} catch (e: any) {
-										searchError = e.message || 'An unexpected error occurred';
+										searchError = e.body?.message || e.message || 'An unexpected error occurred';
 									}
 								})}
 								class="space-y-4"
