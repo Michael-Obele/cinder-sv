@@ -2,6 +2,7 @@ import * as v from 'valibot';
 import { query, form } from '$app/server';
 import { PRIVATE_CINDER_BACKEND_URL, PRIVATE_CINDER_API_KEY } from '$env/static/private';
 import { error } from '@sveltejs/kit';
+import { dailySearchLimiter } from '$lib/server/rate-limiter';
 
 // --- Types ---
 
@@ -112,6 +113,13 @@ export const getCrawlStatus = query(
 
 // 3. Search
 export const searchWeb = form(SearchOptionsSchema, async (data) => {
+	// Enforce daily search limit
+	try {
+		await dailySearchLimiter.consume('global');
+	} catch {
+		throw error(429, 'Daily search limit reached. Please try again tomorrow.');
+	}
+
 	const result = await fetchCinder('/v1/search', 'POST', data);
 	return result.results;
 });
