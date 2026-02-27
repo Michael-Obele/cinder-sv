@@ -23,13 +23,56 @@
 	import ResultCard from '$lib/components/blocks/result-card.svelte';
 	import OptionsSheet from '$lib/components/blocks/options-sheet.svelte';
 	import { cn } from '$lib/utils';
-	import { PersistedState } from 'runed';
 	import { tick } from 'svelte';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { createReactiveDB } from 'svelte-idb/svelte';
+	import { PersistedState } from 'runed';
+
+	const scrapeOptions = new PersistedState('cinder-scrape-options', {
+		mode: 'smart',
+		render: false
+	});
+
+	const crawlOptions = new PersistedState('cinder-crawl-options', {
+		render: false
+	});
+
+	const searchOptions = new PersistedState('cinder-search-options', {
+		mode: 'default',
+		limit: 5,
+		offset: 0,
+		maxAge: 0,
+		includeDomains: '',
+		excludeDomains: '',
+		requiredText: ''
+	});
+
+	const db = createReactiveDB({
+		name: 'cinder-playground',
+		version: 1,
+		stores: {
+			history: { keyPath: 'id' }
+		}
+	});
+
+	const historyLive = db.history.liveAll();
 
 	// Local State
 	const isMobile = new IsMobile();
 	let crawlId = $state<string | null>(null);
-	let activeTab = $state('scrape');
+	let activeTab = $derived(
+		['scrape', 'crawl', 'search'].includes(page.url.searchParams.get('tab') || '')
+			? page.url.searchParams.get('tab')!
+			: 'scrape'
+	);
+
+	function setActiveTab(tab: string) {
+		const newUrl = new URL(page.url);
+		newUrl.searchParams.set('tab', tab);
+		goto(newUrl, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
 	let sidebarOpen = $state(true);
 
 	// Error States
@@ -39,6 +82,7 @@
 
 	// Derived query for crawl status
 	const statusQuery = $derived(crawlId ? getCrawlStatus(crawlId) : null);
+	let crawlCurrent = $state<any>(null);
 
 	// History Management
 	type HistoryItem = {
@@ -49,30 +93,57 @@
 		timestamp: string;
 		data?: any;
 	};
-	const searchHistory = new PersistedState<HistoryItem[]>('cinder-history', []);
 	let selectedHistoryItem = $state<HistoryItem | null>(null);
 
-	function addToHistory(item: HistoryItem) {
-		searchHistory.current = [item, ...searchHistory.current.slice(0, 19)];
+	let searchHistory = $derived(
+		historyLive.current
+			? ([...historyLive.current].sort(
+					(a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+				) as HistoryItem[])
+			: []
+	);
+
+	async function addToHistory(item: HistoryItem) {
+		await db.history.put(item);
+		// Keep only latest 20 items
+		const allItems = (await db.history.getAll()) as HistoryItem[];
+		if (allItems.length > 20) {
+			const sorted = allItems.sort(
+				(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+			);
+			const toDelete = sorted.slice(20);
+			for (const old of toDelete) {
+				await db.history.delete(old.id);
+			}
+		}
 	}
 
-	function clearHistory() {
-		searchHistory.current = [];
+	async function clearHistory() {
+		await db.history.clear();
 		selectedHistoryItem = null;
 	}
 
 	// Polling for crawl status
 	$effect(() => {
 		if (crawlId && activeTab === 'crawl' && statusQuery) {
-			const interval = setInterval(() => {
-				statusQuery.refresh();
+			crawlCurrent = statusQuery.current;
+			const interval = setInterval(async () => {
+				await statusQuery.refresh();
+				crawlCurrent = statusQuery.current;
 			}, 3000);
 			return () => clearInterval(interval);
 		}
 	});
 
 	// Derived states
-	let crawlProgress = $derived(statusQuery?.current?.status === 'completed' ? 100 : 50);
+	let crawlProgress = $derived(
+		crawlCurrent?.state === 'completed' ? 100 : crawlCurrent?.state === 'active' ? 50 : 25
+	);
+	let crawlList = $derived(
+		crawlCurrent?.parsedResult?.data ||
+			crawlCurrent?.parsedResult?.urls ||
+			(Array.isArray(crawlCurrent?.parsedResult) ? crawlCurrent?.parsedResult : [])
+	);
 	let displayedScrapeResult = $derived(
 		selectedHistoryItem?.type === 'scrape' && selectedHistoryItem.data
 			? selectedHistoryItem.data
@@ -91,7 +162,7 @@
 	);
 
 	async function handleScrape(url: string) {
-		activeTab = 'scrape';
+		setActiveTab('scrape');
 		// Wait for tab switch and DOM update
 		await tick();
 
@@ -113,11 +184,11 @@
 
 		<!-- History List -->
 		<div class="flex-1 space-y-2 overflow-y-auto p-3">
-			{#each searchHistory.current as item (item.id)}
+			{#each searchHistory as item (item.id)}
 				<button
 					class="group relative w-full rounded-lg border bg-background p-2.5 text-left transition-all hover:border-primary/50"
 					onclick={() => {
-						activeTab = item.type;
+						setActiveTab(item.type);
 						selectedHistoryItem = item;
 						if (item.type === 'crawl' && item.data?.id) {
 							crawlId = item.data.id;
@@ -219,7 +290,7 @@
 				</div>
 			</div>
 
-			<Tabs bind:value={activeTab} class="w-full">
+			<Tabs value={activeTab} onValueChange={setActiveTab} class="w-full">
 				<TabsList class="mb-8 grid w-full max-w-md grid-cols-3">
 					<TabsTrigger value="scrape" class="gap-2">
 						<Globe class="size-4" />
@@ -276,12 +347,16 @@
 											<Input
 												id="scrape-url"
 												{...scrapeUrl.fields.url.as('text')}
-												placeholder="https://example.com/article"
+												placeholder="https://example.com"
 												class="h-11 bg-background pl-10"
 												aria-invalid={(scrapeUrl.fields.url?.issues()?.length || 0) > 0}
 											/>
 										</div>
-										<OptionsSheet fields={scrapeUrl.fields} />
+										<input type="hidden" name="mode" value={scrapeOptions.current.mode} />
+										{#if scrapeOptions.current.render}
+											<input type="hidden" name="render" value="on" />
+										{/if}
+										<OptionsSheet bind:options={scrapeOptions.current} type="scrape" />
 										<Button
 											type="submit"
 											disabled={!!scrapeUrl.pending}
@@ -452,7 +527,11 @@
 												aria-invalid={(crawlUrl.fields.url?.issues()?.length || 0) > 0}
 											/>
 										</div>
-										<OptionsSheet fields={crawlUrl.fields} />
+										{#if crawlOptions.current.render}
+											<input type="hidden" name="render" value="on" />
+										{/if}
+
+										<OptionsSheet bind:options={crawlOptions.current} type="crawl" />
 										<Button type="submit" disabled={!!crawlUrl.pending} class="h-11 px-8 shadow-md">
 											{#if crawlUrl.pending}
 												<Loader2 class="mr-2 size-4 animate-spin" />
@@ -504,19 +583,23 @@
 									<Badge
 										class={cn(
 											'px-3 py-1',
-											statusQuery?.current?.status === 'completed'
+											crawlCurrent?.state === 'completed'
 												? 'bg-emerald-500 hover:bg-emerald-600'
-												: 'animate-pulse bg-amber-500'
+												: crawlCurrent?.state === 'failed' || crawlCurrent?.state === 'retry'
+													? 'bg-destructive/80'
+													: 'animate-pulse bg-amber-500'
 										)}
 									>
-										{statusQuery?.current?.status || 'Processing'}
+										{crawlCurrent?.state === 'active'
+											? 'Crawling...'
+											: crawlCurrent?.state || 'Processing'}
 									</Badge>
 								</div>
 
 								<div class="space-y-3">
 									<div class="mb-1 flex justify-between text-xs font-bold">
 										<span>Crawl Progress</span>
-										<span>{(statusQuery?.current as any)?.data?.length || 0} Pages Found</span>
+										<span>{crawlList.length || 0} Pages Found</span>
 									</div>
 									<div class="h-2 w-full overflow-hidden rounded-full border bg-muted">
 										<div
@@ -530,9 +613,9 @@
 								</div>
 							</div>
 
-							{#if (statusQuery?.current as any)?.data}
+							{#if crawlList?.length > 0}
 								<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-									{#each (statusQuery?.current as any).data as page (page.url)}
+									{#each crawlList as page (page?.url || page || 'no-key')}
 										<div
 											class="group rounded-xl border border-l-4 border-l-amber-500/30 bg-card p-4 transition-all hover:shadow-md"
 										>
@@ -627,11 +710,37 @@
 											<Input
 												id="search-query"
 												{...searchWeb.fields.query.as('text')}
-												placeholder="e.g. 'latest openai news' or 'technical documentation for svelte 5'"
+												placeholder="e.g. 'latest openai news'"
 												class="h-11 bg-background pl-10"
 												aria-invalid={(searchWeb.fields.query?.issues()?.length || 0) > 0}
 											/>
 										</div>
+										<input type="hidden" name="mode" value={searchOptions.current.mode} />
+										<input type="hidden" name="limit" value={searchOptions.current.limit} />
+										<input type="hidden" name="offset" value={searchOptions.current.offset} />
+										<input type="hidden" name="maxAge" value={searchOptions.current.maxAge} />
+										{#if searchOptions.current.includeDomains}
+											<input
+												type="hidden"
+												name="includeDomains"
+												value={searchOptions.current.includeDomains}
+											/>
+										{/if}
+										{#if searchOptions.current.excludeDomains}
+											<input
+												type="hidden"
+												name="excludeDomains"
+												value={searchOptions.current.excludeDomains}
+											/>
+										{/if}
+										{#if searchOptions.current.requiredText}
+											<input
+												type="hidden"
+												name="requiredText"
+												value={searchOptions.current.requiredText}
+											/>
+										{/if}
+										<OptionsSheet bind:options={searchOptions.current} type="search" />
 										<Button
 											type="submit"
 											disabled={!!searchWeb.pending}

@@ -7,44 +7,30 @@ import { dailySearchLimiter } from '$lib/server/rate-limiter';
 // --- Types ---
 
 // Scrape
+// Scrape
 const ScrapeOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
-	formats: v.optional(
-		v.array(
-			v.picklist([
-				'markdown',
-				'html',
-				'rawHtml',
-				'links',
-				'screenshot',
-				'extract',
-				'screenshot@fullPage'
-			])
-		),
-		['markdown']
-	),
-	onlyMainContent: v.optional(v.boolean(), true),
-	includeTags: v.optional(v.array(v.string()), []),
-	excludeTags: v.optional(v.array(v.string()), []),
-	headers: v.optional(v.record(v.string(), v.string()), {}),
-	waitFor: v.optional(v.number(), 0),
-	mobile: v.optional(v.boolean(), false),
-	skipTlsVerification: v.optional(v.boolean(), false),
-	timeout: v.optional(v.number(), 30000)
+	mode: v.optional(v.union([v.picklist(['smart', 'static', 'dynamic']), v.string()]), 'smart'),
+	render: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false)
 });
 
 // Crawl
 const CrawlOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
-	limit: v.optional(v.number(), 100),
-	maxDepth: v.optional(v.number(), 2),
-	scrapeOptions: v.optional(ScrapeOptionsSchema)
+	render: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false)
 });
 
 // Search
 const SearchOptionsSchema = v.object({
 	query: v.pipe(v.string(), v.nonEmpty('Query is required')),
-	limit: v.optional(v.number(), 5)
+	mode: v.optional(v.union([v.string()]), 'default'),
+	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5),
+	offset: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
+	maxAge: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
+	// Array handling for hidden inputs 
+	includeDomains: v.optional(v.union([v.array(v.string()), v.string()]), []),
+	excludeDomains: v.optional(v.union([v.array(v.string()), v.string()]), []),
+	requiredText: v.optional(v.union([v.array(v.string()), v.string()]), [])
 });
 
 // --- Helper ---
@@ -106,8 +92,21 @@ export const crawlUrl = form(CrawlOptionsSchema, async (data) => {
 export const getCrawlStatus = query(
 	v.string(), // ID
 	async (id) => {
-		const result = await fetchCinder(`/v1/crawl/${id}`, 'GET');
-		return result;
+		const res = await fetchCinder(`/v1/crawl/${id}`, 'GET');
+		// The Go backend (asynq) returns `state` and a serialized `result` string when complete.
+		let parsedResult = null;
+		if (res && res.result) {
+			try {
+				parsedResult = JSON.parse(res.result);
+			} catch (e) {
+				console.warn('Failed to parse crawl result:', e);
+			}
+		}
+
+		return {
+			...res,
+			parsedResult
+		};
 	}
 );
 
@@ -120,6 +119,14 @@ export const searchWeb = form(SearchOptionsSchema, async (data) => {
 		throw error(429, 'Daily search limit reached. Please try again tomorrow.');
 	}
 
-	const result = await fetchCinder('/v1/search', 'POST', data);
+	// Pre-process array fields that might come as comma-separated strings
+	const processedData = {
+		...data,
+		includeDomains: typeof data.includeDomains === 'string' && data.includeDomains ? data.includeDomains.split(',').map(s => s.trim()) : Array.isArray(data.includeDomains) ? data.includeDomains : [],
+		excludeDomains: typeof data.excludeDomains === 'string' && data.excludeDomains ? data.excludeDomains.split(',').map(s => s.trim()) : Array.isArray(data.excludeDomains) ? data.excludeDomains : [],
+		requiredText: typeof data.requiredText === 'string' && data.requiredText ? data.requiredText.split(',').map(s => s.trim()) : Array.isArray(data.requiredText) ? data.requiredText : [],
+	};
+
+	const result = await fetchCinder('/v1/search', 'POST', processedData);
 	return result.results;
 });

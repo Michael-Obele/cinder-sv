@@ -1,31 +1,10 @@
 <script lang="ts">
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import { page } from '$app/state';
-	import { BookOpen, Grid, Map, Play, Shield, Terminal, Zap } from '@lucide/svelte';
+	import { Play } from '@lucide/svelte';
+	import { documentationGroups } from '$lib/docs-content';
 
 	let { children } = $props();
-
-	const items = [
-		{
-			title: 'Getting Started',
-			items: [
-				{ title: 'Introduction', url: '/docs', icon: BookOpen },
-				{ title: 'Setup Guide', url: '/docs/setup', icon: Zap }
-			]
-		},
-		{
-			title: 'Core Concepts',
-			items: [
-				{ title: 'Architecture', url: '/docs/architecture', icon: Map },
-				{ title: 'Features', url: '/docs/features', icon: Grid },
-				{ title: 'User Flow', url: '/docs/user-flow', icon: Terminal }
-			]
-		},
-		{
-			title: 'Reference',
-			items: [{ title: 'Theme Config', url: '/docs/theme', icon: Shield }]
-		}
-	];
 </script>
 
 <div class="flex h-full w-full flex-col">
@@ -38,7 +17,7 @@
 				</h2>
 			</Sidebar.Header>
 			<Sidebar.Content class="px-5">
-				{#each items as group (group.title)}
+				{#each documentationGroups as group (group.title)}
 					<Sidebar.Group>
 						<Sidebar.GroupLabel>{group.title}</Sidebar.GroupLabel>
 						<Sidebar.GroupContent>
