@@ -1,8 +1,27 @@
 import * as v from 'valibot';
-import { query, form } from '$app/server';
+import { query, form, getRequestEvent } from '$app/server';
 import { PRIVATE_CINDER_BACKEND_URL, PRIVATE_CINDER_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
 import { dailySearchLimiter } from '$lib/server/rate-limiter';
+
+// --- Auth Helper ---
+function isAuthenticated(): boolean {
+	const event = getRequestEvent();
+	if (!event) return false;
+	const password = env.MASTRA_PASSWORD;
+	const authCookie = event.cookies.get('mastra_auth');
+	return !!(password && authCookie === password);
+}
+
+function getClientIP(): string {
+	const event = getRequestEvent();
+	try {
+		return event?.getClientAddress() || 'unknown';
+	} catch {
+		return 'unknown';
+	}
+}
 
 // --- Types ---
 
@@ -98,8 +117,9 @@ export const getCrawlStatus = query(
 		if (res && res.result) {
 			try {
 				parsedResult = JSON.parse(res.result);
-			} catch (e) {
-				console.warn('Failed to parse crawl result:', e);
+			} catch {
+				// Result is a plain string message (e.g. "Scraped URL successfully")
+				parsedResult = { message: res.result };
 			}
 		}
 
@@ -112,11 +132,14 @@ export const getCrawlStatus = query(
 
 // 3. Search
 export const searchWeb = form(SearchOptionsSchema, async (data) => {
-	// Enforce daily search limit
-	try {
-		await dailySearchLimiter.consume('global');
-	} catch {
-		throw error(429, 'Daily search limit reached. Please try again tomorrow.');
+	// Enforce daily search limit (authenticated users bypass)
+	if (!isAuthenticated()) {
+		try {
+			const ip = getClientIP();
+			await dailySearchLimiter.consume(ip);
+		} catch {
+			throw error(429, 'Daily search limit reached. Please try again tomorrow.');
+		}
 	}
 
 	// Pre-process array fields that might come as comma-separated strings

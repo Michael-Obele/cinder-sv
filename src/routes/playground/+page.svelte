@@ -144,6 +144,7 @@
 			crawlCurrent?.parsedResult?.urls ||
 			(Array.isArray(crawlCurrent?.parsedResult) ? crawlCurrent?.parsedResult : [])
 	);
+	let crawlMessage = $derived(crawlCurrent?.parsedResult?.message || null);
 	let displayedScrapeResult = $derived(
 		selectedHistoryItem?.type === 'scrape' && selectedHistoryItem.data
 			? selectedHistoryItem.data
@@ -603,7 +604,8 @@
 									</div>
 									<div class="h-2 w-full overflow-hidden rounded-full border bg-muted">
 										<div
-											class="h-full bg-amber-500 transition-all duration-500 w-[{crawlProgress}%]"
+											class="h-full bg-amber-500 transition-all duration-500"
+											style="width: {crawlProgress}%"
 										></div>
 									</div>
 									<p class="text-[10px] text-muted-foreground italic">
@@ -640,6 +642,16 @@
 											</div>
 										</div>
 									{/each}
+								</div>
+							{:else if crawlMessage && crawlCurrent?.state === "completed"}
+								<div class="flex items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-6 animate-in fade-in duration-500">
+									<div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+										<Layers class="size-5 text-emerald-500" />
+									</div>
+									<div>
+										<h3 class="mb-1 font-bold text-emerald-400">Crawl Complete</h3>
+										<p class="text-sm text-muted-foreground">{crawlMessage}</p>
+									</div>
 								</div>
 							{/if}
 						</div>
