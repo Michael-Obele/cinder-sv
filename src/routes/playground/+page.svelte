@@ -139,6 +139,8 @@
 	let crawlProgress = $derived(
 		crawlCurrent?.state === 'completed' ? 100 : crawlCurrent?.state === 'active' ? 50 : 25
 	);
+	let crawlFailed = $derived(crawlCurrent?.crawlFailed ?? false);
+	let crawlFailedUrls = $derived(crawlCurrent?.failedUrls || []);
 	let crawlList = $derived(
 		crawlCurrent?.parsedResult?.data ||
 			crawlCurrent?.parsedResult?.urls ||
@@ -584,16 +586,20 @@
 									<Badge
 										class={cn(
 											'px-3 py-1',
-											crawlCurrent?.state === 'completed'
+											crawlCurrent?.state === 'completed' && !crawlFailed
 												? 'bg-emerald-500 hover:bg-emerald-600'
-												: crawlCurrent?.state === 'failed' || crawlCurrent?.state === 'retry'
+												: crawlCurrent?.state === 'failed' ||
+													  crawlCurrent?.state === 'retry' ||
+													  crawlFailed
 													? 'bg-destructive/80'
 													: 'animate-pulse bg-amber-500'
 										)}
 									>
-										{crawlCurrent?.state === 'active'
-											? 'Crawling...'
-											: crawlCurrent?.state || 'Processing'}
+										{crawlFailed
+											? 'Failed'
+											: crawlCurrent?.state === 'active'
+												? 'Crawling...'
+												: crawlCurrent?.state || 'Processing'}
 									</Badge>
 								</div>
 
@@ -604,7 +610,10 @@
 									</div>
 									<div class="h-2 w-full overflow-hidden rounded-full border bg-muted">
 										<div
-											class="h-full bg-amber-500 transition-all duration-500"
+											class={cn(
+												'h-full transition-all duration-500',
+												crawlFailed ? 'bg-destructive' : 'bg-amber-500'
+											)}
 											style="width: {crawlProgress}%"
 										></div>
 									</div>
@@ -624,18 +633,20 @@
 											<div
 												class="mb-3 line-clamp-2 min-h-8 truncate pr-4 text-xs leading-relaxed font-medium"
 											>
-												{page.title || 'Untitled Page'}
+												{page?.metadata?.title || page?.title || 'Untitled Page'}
 											</div>
 											<div class="flex items-center justify-between">
 												<span
 													class="max-w-37.5 truncate font-mono text-[10px] text-muted-foreground"
-													>{page.url}</span
+													>{page?.url || 'Unknown URL'}</span
 												>
 												<Button
 													variant="ghost"
 													size="icon"
 													class="size-7 opacity-0 transition-opacity group-hover:opacity-100"
-													onclick={() => window.open(page.url, '_blank')}
+													onclick={() => {
+														if (page?.url) window.open(page.url, '_blank');
+													}}
 												>
 													<ExternalLink class="size-3.5" />
 												</Button>
@@ -643,9 +654,34 @@
 										</div>
 									{/each}
 								</div>
-							{:else if crawlMessage && crawlCurrent?.state === "completed"}
-								<div class="flex items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-6 animate-in fade-in duration-500">
-									<div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+							{:else if crawlFailed && crawlFailedUrls.length > 0}
+								<div class="animate-in space-y-3 duration-500 fade-in">
+									<div
+										class="flex items-center gap-4 rounded-xl border border-destructive/20 bg-destructive/10 p-6"
+									>
+										<AlertCircle class="size-6 shrink-0 text-destructive" />
+										<div>
+											<h3 class="mb-1 font-bold text-destructive">Crawl Failed</h3>
+											<p class="text-sm text-muted-foreground">
+												{crawlFailedUrls.length} URL{crawlFailedUrls.length > 1 ? 's' : ''} failed to
+												crawl.
+											</p>
+										</div>
+									</div>
+									{#each crawlFailedUrls as failedUrl (failedUrl.url)}
+										<div class="rounded-lg border border-destructive/10 bg-destructive/5 p-4">
+											<p class="mb-1 truncate font-mono text-xs font-medium">{failedUrl.url}</p>
+											<p class="text-xs text-muted-foreground">{failedUrl.error}</p>
+										</div>
+									{/each}
+								</div>
+							{:else if crawlMessage && crawlCurrent?.state === 'completed' && !crawlFailed}
+								<div
+									class="flex animate-in items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-6 duration-500 fade-in"
+								>
+									<div
+										class="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/20"
+									>
 										<Layers class="size-5 text-emerald-500" />
 									</div>
 									<div>

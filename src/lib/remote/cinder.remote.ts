@@ -77,13 +77,17 @@ async function fetchCinder(endpoint: string, method: string, body?: any) {
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			// Try to parse JSON error if possible
+			// Parse JSON error body for a clean message, fall back to raw text
+			let errorMessage = `API Error: ${response.status} - ${errorText}`;
 			try {
 				const jsonError = JSON.parse(errorText);
-				throw new Error(jsonError.error || jsonError.message || `API Error: ${response.status}`);
-			} catch (e) {
-				throw new Error(`API Error: ${response.status} - ${errorText}`);
+				if (jsonError.error || jsonError.message) {
+					errorMessage = jsonError.error || jsonError.message;
+				}
+			} catch {
+				// errorText is not JSON — keep the raw fallback message
 			}
+			throw new Error(errorMessage);
 		}
 
 		return await response.json();
@@ -123,9 +127,14 @@ export const getCrawlStatus = query(
 			}
 		}
 
+		// Determine if crawl internally failed despite state=completed
+		const crawlFailed = parsedResult?.status === 'failed' || (parsedResult?.failedUrls?.length > 0 && parsedResult?.total === 0);
+
 		return {
 			...res,
-			parsedResult
+			parsedResult,
+			crawlFailed,
+			failedUrls: parsedResult?.failedUrls || []
 		};
 	}
 );
