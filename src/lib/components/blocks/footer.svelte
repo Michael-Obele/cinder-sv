@@ -138,7 +138,15 @@
 						rel="noopener noreferrer"
 						class="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary"
 					>
-						Source Code <ExternalLink class="h-3 w-3" />
+						Frontend Source <ExternalLink class="h-3 w-3" />
+					</a>
+					<a
+						href="https://github.com/Michael-Obele/cinder"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary"
+					>
+						Backend Source <ExternalLink class="h-3 w-3" />
 					</a>
 					<a
 						href="/docs/api"
