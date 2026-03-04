@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Layers, Loader2, AlertCircle, ExternalLink } from '@lucide/svelte';
+	import { Layers, Loader2, AlertCircle, ExternalLink, Globe } from '@lucide/svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
@@ -43,15 +43,45 @@
 	);
 	let crawlMessage = $derived(crawlCurrent?.parsedResult?.message || null);
 
-	// Helpers that fix "Untitled Page" and mapping issues
+	// Helpers for processing and displaying titles elegantly
+	function extractDisplayTitle(urlStr: string) {
+		try {
+			const u = new URL(urlStr);
+			let p = u.pathname;
+			if (p.endsWith('/')) p = p.slice(0, -1);
+			const segments = p.split('/');
+			const last = segments[segments.length - 1];
+			if (!last) return 'Root Index';
+			return last.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+		} catch {
+			return 'Discovered Node';
+		}
+	}
+
 	function getPageTitle(page: any) {
-		if (typeof page === 'string') return page;
-		return page?.metadata?.title || page?.title || page?.url || 'Untitled Page';
+		const rawUrl = typeof page === 'string' ? page : page?.url || '';
+		const title = typeof page === 'string' ? null : page?.metadata?.title || page?.title;
+
+		if (title && typeof title === 'string' && title.trim() !== '') {
+			if (title === rawUrl) return extractDisplayTitle(rawUrl);
+			return title;
+		}
+		return extractDisplayTitle(rawUrl);
 	}
 
 	function getPageUrl(page: any) {
 		if (typeof page === 'string') return page;
-		return page?.url || 'Unknown URL';
+		return page?.url || '';
+	}
+
+	function getParsedUrl(urlStr: string) {
+		if (!urlStr) return { host: 'unknown', path: '', valid: false };
+		try {
+			const u = new URL(urlStr);
+			return { host: u.hostname, path: u.pathname + u.search, valid: true };
+		} catch {
+			return { host: urlStr, path: '', valid: false };
+		}
 	}
 </script>
 
@@ -214,27 +244,48 @@
 		{#if crawlList?.length > 0}
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 				{#each crawlList as page, i (getPageUrl(page) + i)}
+					{@const parsed = getParsedUrl(getPageUrl(page))}
 					<div
-						class="group rounded-xl border border-l-4 border-l-primary/30 bg-card p-4 transition-all hover:border-l-primary hover:shadow-md"
+						class="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border/40 bg-background/50 p-5 transition-all duration-300 hover:border-primary/40 hover:bg-card hover:shadow-xl hover:shadow-primary/5"
 					>
 						<div
-							class="mb-3 line-clamp-2 min-h-8 truncate pr-4 text-xs leading-relaxed font-bold whitespace-normal transition-colors group-hover:text-primary"
-						>
-							{getPageTitle(page)}
+							class="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+						></div>
+
+						<div class="relative z-10 mb-4">
+							<div class="mb-3 flex items-start justify-between gap-4">
+								<div class="flex items-center gap-2 text-primary/70">
+									<Layers class="size-3.5" />
+									<span class="font-mono text-[10px] font-bold tracking-wider uppercase">Page</span>
+								</div>
+								<Button
+									variant="ghost"
+									size="icon"
+									href={getPageUrl(page)}
+									target="_blank"
+									class="size-6 shrink-0 -translate-x-2 opacity-0 transition-all duration-300 group-focus-within:translate-x-0 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:opacity-100"
+								>
+									<ExternalLink class="size-3.5 text-muted-foreground hover:text-primary" />
+								</Button>
+							</div>
+
+							<h4
+								class="line-clamp-2 text-sm font-semibold tracking-tight text-foreground/90 transition-colors group-hover:text-foreground"
+							>
+								{getPageTitle(page)}
+							</h4>
 						</div>
-						<div class="flex items-center justify-between">
-							<span class="max-w-[70%] truncate font-mono text-[10px] text-muted-foreground"
-								>{getPageUrl(page)}</span
-							>
-							<Button
-								variant="ghost"
-								size="icon"
-								href={getPageUrl(page)}
-								target="_blank"
-								class="size-7 opacity-0 transition-opacity group-hover:opacity-100"
-							>
-								<ExternalLink class="size-3.5" />
-							</Button>
+
+						<div class="relative z-10 mt-auto border-t border-border/40 pt-3">
+							<div class="flex items-center gap-1.5 truncate font-mono text-[11px]">
+								<Globe class="size-3 shrink-0 text-muted-foreground/60" />
+								{#if parsed.valid}
+									<span class="text-foreground/70">{parsed.host}</span>
+									<span class="truncate text-muted-foreground/60">{parsed.path}</span>
+								{:else}
+									<span class="truncate text-muted-foreground/60">{parsed.host}</span>
+								{/if}
+							</div>
 						</div>
 					</div>
 				{/each}
