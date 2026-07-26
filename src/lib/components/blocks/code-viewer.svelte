@@ -3,14 +3,20 @@
 	import * as Card from '$lib/components/ui/card';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Copy, Check } from '@lucide/svelte';
+	import { Copy, Check, Image, Camera } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
+	import ImageGallery from './image-gallery.svelte';
 
 	let { result } = $props();
-	// Result can be ScrapeResult (markdown, html, etc.)
+	// Result can be ScrapeResult (markdown, html, images, screenshot, etc.)
 
 	let activeTab = $state('markdown');
 	let copied = $state(false);
+
+	// Determine available tabs
+	let hasImages = $derived(!!result?.images?.length);
+	let hasScreenshot = $derived(!!result?.screenshot?.blob || !!result?.screenshot?.url);
+	let tabCount = $derived(4 + (hasImages ? 1 : 0) + (hasScreenshot ? 1 : 0));
 
 	function copyToClipboard() {
 		let content = '';
@@ -23,6 +29,13 @@
 		copied = true;
 		setTimeout(() => (copied = false), 2000);
 	}
+
+	function getScreenshotSrc(): string {
+		const sc = result.screenshot;
+		if (!sc) return '';
+		if (sc.blob) return `data:image/${sc.format || 'jpeg'};base64,${sc.blob}`;
+		return sc.url || '';
+	}
 </script>
 
 <Card.Root class="flex h-full flex-col border-0 bg-muted/50 shadow-none">
@@ -30,11 +43,17 @@
 		<div
 			class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/50 px-4 py-2 backdrop-blur"
 		>
-			<Tabs.List class="grid w-fit grid-cols-4">
+			<Tabs.List class="grid w-fit gap-0.5" style="grid-template-columns: repeat({tabCount}, auto)">
 				<Tabs.Trigger value="markdown">Markdown</Tabs.Trigger>
 				<Tabs.Trigger value="html">HTML</Tabs.Trigger>
 				<Tabs.Trigger value="json">JSON</Tabs.Trigger>
 				<Tabs.Trigger value="links">Links</Tabs.Trigger>
+				{#if hasImages}
+					<Tabs.Trigger value="images" class="gap-1.5"><Image class="size-3.5" /> Images</Tabs.Trigger>
+				{/if}
+				{#if hasScreenshot}
+					<Tabs.Trigger value="screenshot" class="gap-1.5"><Camera class="size-3.5" /> Screenshot</Tabs.Trigger>
+				{/if}
 			</Tabs.List>
 
 			<div class="flex items-center gap-2">
@@ -79,6 +98,43 @@
 							result.links || []
 						).join('\n') || 'No links found'}</pre>
 				</Tabs.Content>
+				{#if hasImages}
+					<Tabs.Content value="images" class="mt-0">
+						<ImageGallery images={result.images} className="p-0" />
+					</Tabs.Content>
+				{/if}
+				{#if hasScreenshot}
+					<Tabs.Content value="screenshot" class="mt-0">
+						{@const screenshotSrc = getScreenshotSrc()}
+						<div>
+							<div class="mb-3 flex flex-wrap items-center gap-2">
+								{#if result.screenshot.width && result.screenshot.height}
+									<Badge variant="outline" class="text-[10px]">{result.screenshot.width}×{result.screenshot.height}px</Badge>
+								{/if}
+								{#if result.screenshot.format}
+									<Badge variant="outline" class="text-[10px]">{result.screenshot.format.toUpperCase()}</Badge>
+								{/if}
+								{#if result.screenshot.size_bytes}
+									<Badge variant="outline" class="text-[10px]">{(result.screenshot.size_bytes / 1024).toFixed(1)} KB</Badge>
+								{/if}
+								{#if result.screenshot.full_page}
+									<Badge variant="secondary" class="text-[10px]">Full Page</Badge>
+								{/if}
+							</div>
+							{#if screenshotSrc}
+								<div class="overflow-hidden rounded-lg border">
+									<img
+										src={screenshotSrc}
+										alt="Full page screenshot of {result.url}"
+										class="w-full"
+									/>
+								</div>
+							{:else}
+								<p class="text-sm text-muted-foreground">No screenshot data available.</p>
+							{/if}
+						</div>
+					</Tabs.Content>
+				{/if}
 			</ScrollArea>
 		</div>
 	</Tabs.Root>

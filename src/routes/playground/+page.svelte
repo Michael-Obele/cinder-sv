@@ -34,11 +34,19 @@
 
 	const scrapeOptions = new PersistedState('cinder-scrape-options', {
 		mode: 'smart',
-		render: false
+		screenshot: false,
+		images: false,
+		image_format: 'url',
+		max_images: 10,
+		max_image_size_kb: 5120
 	});
 
 	const crawlOptions = new PersistedState('cinder-crawl-options', {
-		render: false
+		mode: 'smart',
+		maxDepth: 2,
+		limit: 10,
+		screenshot: false,
+		images: false
 	});
 
 	const searchOptions = new PersistedState('cinder-search-options', {

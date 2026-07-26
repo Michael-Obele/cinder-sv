@@ -29,17 +29,9 @@
 			<Sheet.Description>Configure advanced {type} parameters.</Sheet.Description>
 		</Sheet.Header>
 		<div class="grid gap-6 py-6">
-			{#if type === 'scrape' || type === 'crawl'}
-				<div class="flex items-center justify-between">
-					<Label>Enable Browser Rendering</Label>
-					<Switch bind:checked={options.render} />
-				</div>
-			{/if}
-
 			{#if type === 'scrape'}
 				<div class="grid grid-cols-4 items-center gap-4">
 					<Label class="text-right text-xs">Extraction Mode</Label>
-					<!-- Custom dropdown equivalent logic -->
 					<div class="col-span-3 flex shrink-0 items-center justify-start gap-1">
 						<Button
 							size="sm"
@@ -56,6 +48,96 @@
 							variant={options.mode === 'dynamic' ? 'default' : 'outline'}
 							onclick={() => (options.mode = 'dynamic')}>Dynamic</Button
 						>
+					</div>
+				</div>
+
+				<div class="space-y-4">
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Screenshot</Label>
+						<div class="col-span-3">
+							<Switch bind:checked={options.screenshot} />
+						</div>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Extract Images</Label>
+						<div class="col-span-3">
+							<Switch bind:checked={options.images} />
+						</div>
+					</div>
+					{#if options.images}
+						<div class="grid grid-cols-4 items-center gap-4">
+							<Label class="text-right text-xs">Image Format</Label>
+							<div class="col-span-3 flex shrink-0 items-center justify-start gap-1">
+								<Button
+									size="sm"
+									variant={options.image_format === 'url' ? 'default' : 'outline'}
+									onclick={() => (options.image_format = 'url')}>URL</Button
+								>
+								<Button
+									size="sm"
+									variant={options.image_format === 'blob' ? 'default' : 'outline'}
+									onclick={() => (options.image_format = 'blob')}>Blob</Button
+								>
+							</div>
+						</div>
+						<div class="grid grid-cols-4 items-center gap-4">
+							<Label class="text-right">Max Images</Label>
+							<Input type="number" bind:value={options.max_images} class="col-span-3" placeholder="10" min="1" max="100" />
+						</div>
+						<div class="grid grid-cols-4 items-center gap-4">
+							<Label class="text-right leading-tight">Max Image Size (KB)</Label>
+							<Input type="number" bind:value={options.max_image_size_kb} class="col-span-3" placeholder="5120" min="1" />
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+		{#if type === 'crawl'}
+				<div class="space-y-4">
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Crawl Mode</Label>
+						<div class="col-span-3 flex shrink-0 items-center justify-start gap-1">
+							<Button
+								size="sm"
+								variant={options.mode === 'smart' ? 'default' : 'outline'}
+								onclick={() => (options.mode = 'smart')}>Smart</Button
+							>
+							<Button
+								size="sm"
+								variant={options.mode === 'static' ? 'default' : 'outline'}
+								onclick={() => (options.mode = 'static')}>Static</Button
+							>
+							<Button
+								size="sm"
+								variant={options.mode === 'dynamic' ? 'default' : 'outline'}
+								onclick={() => (options.mode = 'dynamic')}>Dynamic</Button
+							>
+						</div>
+					</div>
+					{#if options.mode === 'dynamic'}
+						<div class="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
+							Dynamic mode requires Chrome/Chromium on the backend server. If unavailable, scraping will fail.
+						</div>
+					{/if}
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right">Max Depth</Label>
+						<Input type="number" bind:value={options.maxDepth} class="col-span-3" placeholder="2" min="1" max="10" />
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right">Page Limit</Label>
+						<Input type="number" bind:value={options.limit} class="col-span-3" placeholder="10" min="1" max="100" />
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Screenshots</Label>
+						<div class="col-span-3">
+							<Switch bind:checked={options.screenshot} />
+						</div>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Extract Images</Label>
+						<div class="col-span-3">
+							<Switch bind:checked={options.images} />
+						</div>
 					</div>
 				</div>
 			{/if}

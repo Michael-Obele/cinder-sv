@@ -60,9 +60,16 @@
 						/>
 					</div>
 					<input type="hidden" name="mode" value={scrapeOptions.current.mode} />
-					{#if scrapeOptions.current.render}
-						<input type="hidden" name="render" value="on" />
+
+					{#if scrapeOptions.current.screenshot}
+						<input type="hidden" name="screenshot" value="on" />
 					{/if}
+					{#if scrapeOptions.current.images}
+						<input type="hidden" name="images" value="on" />
+					{/if}
+					<input type="hidden" name="image_format" value={scrapeOptions.current.image_format || 'url'} />
+					<input type="hidden" name="max_images" value={scrapeOptions.current.max_images || 10} />
+					<input type="hidden" name="max_image_size_kb" value={scrapeOptions.current.max_image_size_kb || 5120} />
 					<OptionsSheet bind:options={scrapeOptions.current} type="scrape" />
 					<Button type="submit" disabled={!!scrapeUrl.pending} class="h-11 px-8 shadow-md">
 						{#if scrapeUrl.pending}

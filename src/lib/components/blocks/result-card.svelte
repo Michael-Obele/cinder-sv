@@ -1,9 +1,12 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
-	import { ExternalLink } from '@lucide/svelte';
+	import { ExternalLink, Image, Camera } from '@lucide/svelte';
 
 	let { result } = $props();
+
+	let imageCount = $derived(result?.images?.length || 0);
+	let hasScreenshot = $derived(!!result?.screenshot?.blob || !!result?.screenshot?.url);
 </script>
 
 <Card.Root>

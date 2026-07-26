@@ -1,8 +1,8 @@
 <script lang="ts">
 	import {
-		Github,
+		Code2,
 		Mail,
-		Twitter,
+		Send,
 		Heart,
 		ExternalLink,
 		Globe,
@@ -41,7 +41,7 @@
 									rel="noopener noreferrer"
 									class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-md"
 								>
-									<Github class="h-5 w-5" />
+									<Code2 class="h-5 w-5" />
 									<span class="sr-only">GitHub</span>
 								</a>
 							{/snippet}
@@ -58,7 +58,7 @@
 									rel="noopener noreferrer"
 									class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-muted/50 transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-md"
 								>
-									<Twitter class="h-5 w-5" />
+									<Send class="h-5 w-5" />
 									<span class="sr-only">Twitter</span>
 								</a>
 							{/snippet}

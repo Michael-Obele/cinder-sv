@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Menu, X, Github, LayoutDashboard, FileText, Play, Crown, LogIn } from '@lucide/svelte';
+	import { Menu, X, Code2, LayoutDashboard, FileText, Play, Crown, LogIn } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import ModeToggle from './mode-toggle.svelte';
 	import { page } from '$app/state';
@@ -92,7 +92,7 @@
 						title="GitHub"
 						class="inline-flex"
 					>
-						<Github class="h-5 w-5" />
+						<Code2 class="h-5 w-5" />
 					</a>
 				</Button>
 				<ModeToggle />
@@ -140,7 +140,7 @@
 									rel="noopener noreferrer"
 									class="inline-flex"
 								>
-									<Github class="h-5 w-5" />
+									<Code2 class="h-5 w-5" />
 								</a>
 							</Button>
 							<ModeToggle />

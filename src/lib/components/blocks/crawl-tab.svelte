@@ -129,8 +129,15 @@
 							aria-invalid={(crawlUrl.fields.url?.issues()?.length || 0) > 0}
 						/>
 					</div>
-					{#if crawlOptions.current.render}
-						<input type="hidden" name="render" value="on" />
+					<input type="hidden" name="mode" value={crawlOptions.current.mode || 'smart'} />
+
+					<input type="hidden" name="maxDepth" value={crawlOptions.current.maxDepth || 2} />
+					<input type="hidden" name="limit" value={crawlOptions.current.limit || 10} />
+					{#if crawlOptions.current.screenshot}
+						<input type="hidden" name="screenshot" value="on" />
+					{/if}
+					{#if crawlOptions.current.images}
+						<input type="hidden" name="images" value="on" />
 					{/if}
 
 					<OptionsSheet bind:options={crawlOptions.current} type="crawl" />
@@ -159,9 +166,9 @@
 		<div class="flex items-center gap-4">
 			<span class="flex items-center gap-1.5 text-amber-500">
 				<span class="size-1.5 animate-pulse rounded-full bg-amber-500"></span>
-				Max Depth: 2
+				Max Depth: {crawlOptions.current.maxDepth || 2}
 			</span>
-			<span class="flex items-center gap-1.5">Limit: 100 pages</span>
+			<span class="flex items-center gap-1.5">Limit: {crawlOptions.current.limit || 10} pages</span>
 		</div>
 		<span>Crawl engine idle</span>
 	</div>

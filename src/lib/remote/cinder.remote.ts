@@ -1,8 +1,9 @@
 import * as v from 'valibot';
 import { query, form, getRequestEvent } from '$app/server';
-import { PRIVATE_CINDER_BACKEND_URL, PRIVATE_CINDER_API_KEY } from '$env/static/private';
+import { PRIVATE_CINDER_BACKEND_URL } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { dailySearchLimiter } from '$lib/server/rate-limiter';
 
 // --- Auth Helper ---
@@ -26,17 +27,24 @@ function getClientIP(): string {
 // --- Types ---
 
 // Scrape
-// Scrape
 const ScrapeOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
 	mode: v.optional(v.union([v.picklist(['smart', 'static', 'dynamic']), v.string()]), 'smart'),
-	render: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false)
+	screenshot: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	image_format: v.optional(v.union([v.picklist(['url', 'blob']), v.string()]), 'url'),
+	max_images: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 10),
+	max_image_size_kb: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5120)
 });
 
 // Crawl
 const CrawlOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
-	render: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false)
+	mode: v.optional(v.union([v.picklist(['smart', 'static', 'dynamic']), v.string()]), 'smart'),
+	maxDepth: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 2),
+	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 10),
+	screenshot: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false)
 });
 
 // Search
@@ -46,7 +54,7 @@ const SearchOptionsSchema = v.object({
 	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5),
 	offset: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
 	maxAge: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
-	// Array handling for hidden inputs 
+	// Array handling for hidden inputs
 	includeDomains: v.optional(v.union([v.array(v.string()), v.string()]), []),
 	excludeDomains: v.optional(v.union([v.array(v.string()), v.string()]), []),
 	requiredText: v.optional(v.union([v.array(v.string()), v.string()]), [])
@@ -59,20 +67,26 @@ async function fetchCinder(endpoint: string, method: string, body?: any) {
 		throw new Error('PRIVATE_CINDER_BACKEND_URL is not set');
 	}
 
-	const url = `${PRIVATE_CINDER_BACKEND_URL}${endpoint}`;
+	// Normalize: strip trailing slash and any '/v1' suffix from base URL
+	// so it works regardless of how the user configured it
+	const baseUrl = PRIVATE_CINDER_BACKEND_URL.replace(/\/+$/, '').replace(/\/v1$/, '');
+	const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+	const url = `${baseUrl}${path}`;
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json'
 	};
 
-	if (PRIVATE_CINDER_API_KEY) {
-		headers['Authorization'] = `Bearer ${PRIVATE_CINDER_API_KEY}`;
-	}
+
+	const bodyStr = body ? JSON.stringify(body) : undefined;
+
+	console.log('[Cinder] Fetching', method, url);
+	if (body) console.log('[Cinder] Body:', JSON.stringify(body));
 
 	try {
 		const response = await fetch(url, {
 			method,
 			headers,
-			body: body ? JSON.stringify(body) : undefined
+			body: bodyStr
 		});
 
 		if (!response.ok) {
@@ -87,13 +101,28 @@ async function fetchCinder(endpoint: string, method: string, body?: any) {
 			} catch {
 				// errorText is not JSON — keep the raw fallback message
 			}
+			console.error('[Cinder] Response not OK:', response.status, errorMessage);
+
+			// Detect common issues from the request body
+			if (body?.render === true && errorMessage === 'Scraping failed') {
+				throw new Error(
+					'Scraping failed — headless browser mode (render) is not available on this server. ' +
+					'Try turning OFF the "Browser Rendering" toggle in Advanced Options and scrape again.'
+				);
+			}
+
 			throw new Error(errorMessage);
 		}
 
-		return await response.json();
+		const result = await response.json();
+		console.log('[Cinder] Response OK for', url);
+		return result;
 	} catch (err: any) {
 		console.error('Cinder API Error:', err);
-		throw error(500, err.message || 'Internal Server Error');
+		// Include more detail in the error for debugging
+		const detail = `Backend URL: ${PRIVATE_CINDER_BACKEND_URL} | Endpoint: ${endpoint} | Method: ${method}`;
+		const errorMsg = dev ? `${err.message} — ${detail}` : err.message;
+		throw error(500, errorMsg || 'Internal Server Error');
 	}
 }
 
