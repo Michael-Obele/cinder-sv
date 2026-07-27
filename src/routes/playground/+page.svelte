@@ -102,6 +102,8 @@
 		title: string;
 		url: string;
 		timestamp: string;
+		preview?: string;
+		meta?: Record<string, any>;
 		data?: any;
 	};
 	let selectedHistoryItem = $state<HistoryItem | null>(null);
@@ -165,70 +167,97 @@
 	}
 </script>
 
-{#snippet historyContent()}
-	<div class="flex h-full flex-col">
-		<!-- Header -->
-		<div class="flex items-center gap-2 border-b bg-background/50 p-4 backdrop-blur">
-			<History class="size-4 text-muted-foreground" />
-			<h2 class="text-sm font-semibold">History</h2>
-		</div>
+	{#snippet historyContent()}
+		<div class="flex h-full flex-col">
+			<!-- Header -->
+			<div class="flex items-center gap-2 border-b bg-background/50 p-4 backdrop-blur">
+				<History class="size-4 text-muted-foreground" />
+				<h2 class="text-sm font-semibold">History</h2>
+			</div>
 
-		<!-- History List -->
-		<div class="flex-1 space-y-2 overflow-y-auto p-3">
-			{#each searchHistory as item (item.id)}
-				<button
-					class="group relative w-full rounded-lg border bg-background p-2.5 text-left transition-all hover:border-primary/50"
-					onclick={() => {
-						setActiveTab(item.type);
-						selectedHistoryItem = item;
-						if (item.type === 'crawl' && item.data?.id) {
-							crawlId = item.data.id;
-						}
-					}}
-				>
-					<div class="mb-1 flex items-center gap-2">
-						{#if item.type === 'scrape'}<Globe class="size-3 text-blue-400" />
-						{:else if item.type === 'crawl'}<Layers class="size-3 text-amber-400" />
-						{:else}<Search class="size-3 text-primary" />
+			<!-- History List -->
+			<div class="flex-1 space-y-2 overflow-y-auto p-3">
+				{#each searchHistory as item (item.id)}
+					<button
+						class="group relative w-full rounded-lg border bg-card p-3 text-left shadow-xs transition-all hover:border-primary/50 hover:shadow-sm {selectedHistoryItem?.id === item.id ? 'border-primary/40 bg-primary/[3%] shadow-sm' : 'border-border/60'}"
+						onclick={() => {
+							setActiveTab(item.type);
+							selectedHistoryItem = item;
+							if (item.type === 'crawl' && item.data?.id) {
+								crawlId = item.data.id;
+							}
+						}}
+					>
+						<div class="mb-1.5 flex items-center gap-2">
+							{#if item.type === 'scrape'}
+								<div class="flex size-5 items-center justify-center rounded bg-blue-500/10">
+									<Globe class="size-3 text-blue-500" />
+								</div>
+							{:else if item.type === 'crawl'}
+								<div class="flex size-5 items-center justify-center rounded bg-amber-500/10">
+									<Layers class="size-3 text-amber-500" />
+								</div>
+							{:else}
+								<div class="flex size-5 items-center justify-center rounded bg-primary/10">
+									<Search class="size-3 text-primary" />
+								</div>
+							{/if}
+							<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+								{item.type}
+							</span>
+							{#if item.meta}
+								{#if item.type === 'scrape' && item.meta.images > 0}
+									<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold">{item.meta.images} img</Badge>
+								{/if}
+								{#if item.type === 'scrape' && item.meta.screenshot}
+									<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold">ss</Badge>
+								{/if}
+								{#if item.type === 'search' && item.meta.count}
+									<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold">{item.meta.count}</Badge>
+								{/if}
+							{/if}
+						</div>
+						<div class="mb-0.5 truncate pr-4 text-xs font-semibold text-foreground">{item.title}</div>
+						{#if item.type === 'scrape' && item.url && item.url !== 'Unknown'}
+							{@const hostname = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })()}
+							{#if hostname}
+								<div class="truncate text-[11px] font-medium text-muted-foreground/80">{hostname}</div>
+							{/if}
 						{/if}
-						<span class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-							{item.type}
-						</span>
+						{#if item.preview}
+							<div class="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/70">{item.preview}</div>
+						{/if}
+						<div class="mt-2 flex items-center gap-1 border-t border-border/40 pt-1.5 text-[9px] font-medium text-muted-foreground/60">
+							<Clock class="size-2.5" />
+							{new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+							{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+						</div>
+					</button>
+				{:else}
+					<div
+						class="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50"
+					>
+						<History class="size-8 mb-2 stroke-[1px]" />
+						<p class="text-xs">No history yet</p>
 					</div>
-					<div class="truncate pr-4 text-xs font-medium">{item.title}</div>
-					<div class="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-						<Clock class="size-2.5" />
-						{new Date(item.timestamp).toLocaleTimeString([], {
-							hour: '2-digit',
-							minute: '2-digit'
-						})}
-					</div>
-				</button>
-			{:else}
-				<div
-					class="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50"
-				>
-					<History class="size-8 mb-2 stroke-[1px]" />
-					<p class="text-xs">No history yet</p>
-				</div>
-			{/each}
-		</div>
+				{/each}
+			</div>
 
-		<!-- Footer: Clear History Action -->
-		<div class="border-t bg-background/50 p-3 backdrop-blur">
-			<Button
-				variant="destructive"
-				size="sm"
-				class="w-full"
-				onclick={() => clearHistory()}
-				title="Clear all history"
-			>
-				<Trash2 class="mr-2 size-3.5" />
-				Clear History
-			</Button>
+			<!-- Footer: Clear History Action -->
+			<div class="border-t bg-background/50 p-3 backdrop-blur">
+				<Button
+					variant="destructive"
+					size="sm"
+					class="w-full"
+					onclick={() => clearHistory()}
+					title="Clear all history"
+				>
+					<Trash2 class="mr-2 size-3.5" />
+					Clear History
+				</Button>
+			</div>
 		</div>
-	</div>
-{/snippet}
+	{/snippet}
 
 <div class="flex flex-1 flex-col bg-background md:flex-row">
 	<!-- History Sidebar (Desktop Only) -->

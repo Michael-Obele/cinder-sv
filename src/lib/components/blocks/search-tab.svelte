@@ -26,12 +26,15 @@
 					await submit();
 					const result = searchWeb.result as any[];
 					if (result?.length) {
+						const query = searchWeb.fields.query.value();
 						addToHistory({
 							id: crypto.randomUUID(),
 							type: 'search',
-							title: `Search: ${searchWeb.fields.query.value()}`,
+							title: query,
 							url: 'Search Results',
 							timestamp: new Date().toISOString(),
+							preview: `${result.length} result${result.length > 1 ? 's' : ''} — ${result[0]?.title || ''}`,
+							meta: { count: result.length },
 							data: result
 						});
 					}

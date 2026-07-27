@@ -96,13 +96,16 @@
 					const result = crawlUrl.result as any;
 					if (result?.id) {
 						crawlId = result.id;
+						const crawlUrlValue = crawlUrl.fields.url.value();
 						addToHistory({
 							id: crypto.randomUUID(),
 							type: 'crawl',
-							title: `Crawl: ${result.id}`,
+							title: crawlUrlValue || 'URL Crawl',
 							url: 'Crawl Job',
 							timestamp: new Date().toISOString(),
-							data: { id: result.id }
+							preview: `Crawl ID: ${result.id}`,
+							meta: { depth: result.maxDepth, limit: result.limit },
+							data: { id: result.id, url: crawlUrlValue }
 						});
 					}
 				} catch (e: any) {

@@ -10,13 +10,19 @@
 	let { result } = $props();
 	// Result can be ScrapeResult (markdown, html, images, screenshot, etc.)
 
-	let activeTab = $state('markdown');
 	let copied = $state(false);
 
 	// Determine available tabs
 	let hasImages = $derived(!!result?.images?.length);
 	let hasScreenshot = $derived(!!result?.screenshot?.blob || !!result?.screenshot?.url);
 	let tabCount = $derived(4 + (hasImages ? 1 : 0) + (hasScreenshot ? 1 : 0));
+
+	// Default to images when available, then screenshot, else markdown
+	// Writable $derived: assigning to it temporarily overrides the computed value
+	// until the expression re-evaluates (when result/hasImages/hasScreenshot change)
+	let activeTab = $derived(
+		!result ? 'markdown' : hasImages ? 'images' : hasScreenshot ? 'screenshot' : 'markdown'
+	);
 
 	function copyToClipboard() {
 		let content = '';

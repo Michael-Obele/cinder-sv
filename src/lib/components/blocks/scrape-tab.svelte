@@ -15,6 +15,15 @@
 		displayedScrapeResult,
 		addToHistory
 	} = $props();
+
+	function extractHostname(urlStr: string): string {
+		try {
+			const u = new URL(urlStr);
+			return u.hostname;
+		} catch {
+			return urlStr;
+		}
+	}
 </script>
 
 <section class="overflow-hidden rounded-xl border bg-card/50 shadow-sm backdrop-blur-sm">
@@ -26,12 +35,23 @@
 				try {
 					await submit();
 					if (scrapeUrl.result) {
+						const r = scrapeUrl.result as any;
+						const resultUrl = r.url || '';
+						const hostname = extractHostname(resultUrl);
+						const title = r.metadata?.title || hostname || 'Scraped Page';
+						const preview = r.metadata?.description || r.markdown?.slice(0, 100).replace(/\n/g, ' ') || '';
 						addToHistory({
 							id: crypto.randomUUID(),
 							type: 'scrape',
-							title: (scrapeUrl.result as any).metadata?.title || 'Scraped Page',
-							url: (scrapeUrl.result as any).url || 'Unknown',
+							title,
+							url: resultUrl,
 							timestamp: new Date().toISOString(),
+							preview: preview.slice(0, 120),
+							meta: {
+								images: r.images?.length || 0,
+								links: r.links?.length || 0,
+								screenshot: !!(r.screenshot?.blob || r.screenshot?.url)
+							},
 							data: scrapeUrl.result
 						});
 					}
