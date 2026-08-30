@@ -37,7 +37,9 @@
 	let crawlFailed = $derived(crawlCurrent?.crawlFailed ?? false);
 	let crawlFailedUrls = $derived(crawlCurrent?.failedUrls || []);
 	let crawlList = $derived(
-		crawlCurrent?.parsedResult?.data ||
+		crawlCurrent?.crawl?.pages ||
+			crawlCurrent?.parsedResult?.pages ||
+			crawlCurrent?.parsedResult?.data ||
 			crawlCurrent?.parsedResult?.urls ||
 			(Array.isArray(crawlCurrent?.parsedResult) ? crawlCurrent?.parsedResult : [])
 	);
@@ -141,6 +143,19 @@
 					{/if}
 					{#if crawlOptions.current.images}
 						<input type="hidden" name="images" value="on" />
+					{/if}
+					<input type="hidden" name="image_format" value={crawlOptions.current.image_format || 'url'} />
+					{#if crawlOptions.current.include_paths}
+						<input type="hidden" name="include_paths" value={crawlOptions.current.include_paths} />
+					{/if}
+					{#if crawlOptions.current.exclude_paths}
+						<input type="hidden" name="exclude_paths" value={crawlOptions.current.exclude_paths} />
+					{/if}
+					{#if crawlOptions.current.webhook_url}
+						<input type="hidden" name="webhook_url" value={crawlOptions.current.webhook_url} />
+					{/if}
+					{#if crawlOptions.current.webhook_secret}
+						<input type="hidden" name="webhook_secret" value={crawlOptions.current.webhook_secret} />
 					{/if}
 
 					<OptionsSheet bind:options={crawlOptions.current} type="crawl" />

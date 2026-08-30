@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import { Settings } from '@lucide/svelte';
 
 	let {
@@ -11,7 +12,7 @@
 		type = 'scrape'
 	}: {
 		options: Record<string, any>;
-		type?: 'scrape' | 'crawl' | 'search';
+		type?: 'scrape' | 'crawl' | 'search' | 'map' | 'monitor';
 	} = $props();
 </script>
 
@@ -82,17 +83,81 @@
 						</div>
 						<div class="grid grid-cols-4 items-center gap-4">
 							<Label class="text-right">Max Images</Label>
-							<Input type="number" bind:value={options.max_images} class="col-span-3" placeholder="10" min="1" max="100" />
+							<Input
+								type="number"
+								bind:value={options.max_images}
+								class="col-span-3"
+								placeholder="10"
+								min="1"
+								max="100"
+							/>
 						</div>
 						<div class="grid grid-cols-4 items-center gap-4">
 							<Label class="text-right leading-tight">Max Image Size (KB)</Label>
-							<Input type="number" bind:value={options.max_image_size_kb} class="col-span-3" placeholder="5120" min="1" />
+							<Input
+								type="number"
+								bind:value={options.max_image_size_kb}
+								class="col-span-3"
+								placeholder="5120"
+								min="1"
+							/>
 						</div>
 					{/if}
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Summary</Label>
+						<div class="col-span-3"><Switch bind:checked={options.summary} /></div>
+					</div>
+					{#if options.summary}
+						<div class="grid grid-cols-4 items-center gap-4">
+							<Label class="text-right text-xs">Sentences</Label>
+							<Input
+								type="number"
+								bind:value={options.summary_sentences}
+								class="col-span-3"
+								placeholder="5"
+								min="1"
+								max="20"
+							/>
+						</div>
+					{/if}
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Redact PII</Label>
+						<div class="col-span-3"><Switch bind:checked={options.redact_pii} /></div>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Block Ads</Label>
+						<div class="col-span-3"><Switch bind:checked={options.block_ads} /></div>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Remove Base64</Label>
+						<div class="col-span-3"><Switch bind:checked={options.remove_base64_images} /></div>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right text-xs">Include Links</Label>
+						<div class="col-span-3"><Switch bind:checked={options.include_links} /></div>
+					</div>
+					<div class="grid grid-cols-4 items-start gap-4">
+						<Label class="pt-2 text-right text-xs leading-tight">Extract Schema (JSON)</Label>
+						<Textarea
+							bind:value={options.extract_schema}
+							class="col-span-3 font-mono text-xs"
+							placeholder={'{"title":{"selector":"h1"}}'}
+							rows={3}
+						/>
+					</div>
+					<div class="grid grid-cols-4 items-start gap-4">
+						<Label class="pt-2 text-right text-xs leading-tight">Actions (JSON)</Label>
+						<Textarea
+							bind:value={options.actions}
+							class="col-span-3 font-mono text-xs"
+							placeholder={'[{"type":"scroll_to_bottom"}]'}
+							rows={3}
+						/>
+					</div>
 				</div>
 			{/if}
 
-		{#if type === 'crawl'}
+			{#if type === 'crawl'}
 				<div class="space-y-4">
 					<div class="grid grid-cols-4 items-center gap-4">
 						<Label class="text-right text-xs">Crawl Mode</Label>
@@ -115,17 +180,34 @@
 						</div>
 					</div>
 					{#if options.mode === 'dynamic'}
-						<div class="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
-							Dynamic mode requires Chrome/Chromium on the backend server. If unavailable, scraping will fail.
+						<div
+							class="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400"
+						>
+							Dynamic mode requires Chrome/Chromium on the backend server. If unavailable, scraping
+							will fail.
 						</div>
 					{/if}
 					<div class="grid grid-cols-4 items-center gap-4">
 						<Label class="text-right">Max Depth</Label>
-						<Input type="number" bind:value={options.maxDepth} class="col-span-3" placeholder="2" min="1" max="10" />
+						<Input
+							type="number"
+							bind:value={options.maxDepth}
+							class="col-span-3"
+							placeholder="2"
+							min="1"
+							max="10"
+						/>
 					</div>
 					<div class="grid grid-cols-4 items-center gap-4">
 						<Label class="text-right">Page Limit</Label>
-						<Input type="number" bind:value={options.limit} class="col-span-3" placeholder="10" min="1" max="100" />
+						<Input
+							type="number"
+							bind:value={options.limit}
+							class="col-span-3"
+							placeholder="10"
+							min="1"
+							max="100"
+						/>
 					</div>
 					<div class="grid grid-cols-4 items-center gap-4">
 						<Label class="text-right text-xs">Screenshots</Label>
@@ -139,6 +221,114 @@
 							<Switch bind:checked={options.images} />
 						</div>
 					</div>
+					{#if options.images}
+						<div class="grid grid-cols-4 items-center gap-4">
+							<Label class="text-right text-xs">Image Format</Label>
+							<div class="col-span-3 flex shrink-0 items-center justify-start gap-1">
+								<Button
+									size="sm"
+									variant={options.image_format === 'url' ? 'default' : 'outline'}
+									onclick={() => (options.image_format = 'url')}>URL</Button
+								>
+								<Button
+									size="sm"
+									variant={options.image_format === 'blob' ? 'default' : 'outline'}
+									onclick={() => (options.image_format = 'blob')}>Blob</Button
+								>
+							</div>
+						</div>
+					{/if}
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Include Paths</Label>
+						<Input
+							bind:value={options.include_paths}
+							class="col-span-3 font-mono text-xs"
+							placeholder="/blog/*, /docs/**"
+						/>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Exclude Paths</Label>
+						<Input
+							bind:value={options.exclude_paths}
+							class="col-span-3 font-mono text-xs"
+							placeholder="/admin/*, /login"
+						/>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Webhook URL</Label>
+						<Input
+							bind:value={options.webhook_url}
+							class="col-span-3 font-mono text-xs"
+							placeholder="https://myapp.example.com/hooks/cinder"
+						/>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Webhook Secret</Label>
+						<Input
+							bind:value={options.webhook_secret}
+							class="col-span-3 font-mono text-xs"
+							placeholder="s3cret"
+							type="password"
+						/>
+					</div>
+				</div>
+			{/if}
+
+			{#if type === 'map'}
+				<div class="space-y-4">
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Search Filter</Label>
+						<Input bind:value={options.search} class="col-span-3" placeholder="blog" />
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right">Limit</Label>
+						<Input
+							type="number"
+							bind:value={options.limit}
+							class="col-span-3"
+							placeholder="100"
+							min="1"
+							max="5000"
+						/>
+					</div>
+					<p class="pl-2 text-[11px] text-muted-foreground">
+						Map uses sitemap.xml → robots.txt → link fallback. No Redis required.
+					</p>
+				</div>
+			{/if}
+
+			{#if type === 'monitor'}
+				<div class="space-y-4">
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Interval (s)</Label>
+						<Input
+							type="number"
+							bind:value={options.interval_seconds}
+							class="col-span-3"
+							placeholder="3600"
+							min="3600"
+						/>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Webhook URL</Label>
+						<Input
+							bind:value={options.webhook_url}
+							class="col-span-3 font-mono text-xs"
+							placeholder="https://myapp.example.com/hooks/cinder"
+						/>
+					</div>
+					<div class="grid grid-cols-4 items-center gap-4">
+						<Label class="text-right leading-tight">Webhook Secret</Label>
+						<Input
+							bind:value={options.webhook_secret}
+							class="col-span-3 font-mono text-xs"
+							placeholder="s3cret"
+							type="password"
+						/>
+					</div>
+					<p class="pl-2 text-[11px] text-muted-foreground">
+						Hashes markdown on interval, fires signed webhook on change. Min 3600s. Requires Redis.
+					</p>
 				</div>
 			{/if}
 

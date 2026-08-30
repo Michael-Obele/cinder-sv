@@ -10,6 +10,9 @@
 		Search,
 		Globe,
 		Layers,
+		Map,
+		Package,
+		Monitor,
 		History,
 		ExternalLink,
 		Loader2,
@@ -25,6 +28,9 @@
 	import ScrapeTab from '$lib/components/blocks/scrape-tab.svelte';
 	import CrawlTab from '$lib/components/blocks/crawl-tab.svelte';
 	import SearchTab from '$lib/components/blocks/search-tab.svelte';
+	import MapTab from '$lib/components/blocks/map-tab.svelte';
+	import BatchTab from '$lib/components/blocks/batch-tab.svelte';
+	import MonitorTab from '$lib/components/blocks/monitor-tab.svelte';
 	import { cn } from '$lib/utils';
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
@@ -38,7 +44,15 @@
 		images: false,
 		image_format: 'url',
 		max_images: 10,
-		max_image_size_kb: 5120
+		max_image_size_kb: 5120,
+		summary: false,
+		summary_sentences: 5,
+		redact_pii: false,
+		block_ads: false,
+		remove_base64_images: false,
+		include_links: false,
+		extract_schema: '',
+		actions: ''
 	});
 
 	const crawlOptions = new PersistedState('cinder-crawl-options', {
@@ -46,7 +60,12 @@
 		maxDepth: 2,
 		limit: 10,
 		screenshot: false,
-		images: false
+		images: false,
+		image_format: 'url',
+		include_paths: '',
+		exclude_paths: '',
+		webhook_url: '',
+		webhook_secret: ''
 	});
 
 	const searchOptions = new PersistedState('cinder-search-options', {
@@ -57,6 +76,17 @@
 		includeDomains: '',
 		excludeDomains: '',
 		requiredText: ''
+	});
+
+	const mapOptions = new PersistedState('cinder-map-options', {
+		search: '',
+		limit: 100
+	});
+
+	const monitorOptions = new PersistedState('cinder-monitor-options', {
+		interval_seconds: 3600,
+		webhook_url: '',
+		webhook_secret: ''
 	});
 
 	const db = createReactiveDB({
@@ -72,8 +102,9 @@
 	// Local State
 	const isMobile = new IsMobile();
 	let crawlId = $state<string | null>(null);
+	const ALL_TABS = ['scrape', 'crawl', 'search', 'map', 'batch', 'monitor'] as const;
 	let activeTab = $derived(
-		['scrape', 'crawl', 'search'].includes(page.url.searchParams.get('tab') || '')
+		(ALL_TABS as readonly string[]).includes(page.url.searchParams.get('tab') || '')
 			? page.url.searchParams.get('tab')!
 			: 'scrape'
 	);
@@ -90,6 +121,9 @@
 	let scrapeError = $state<string | null>(null);
 	let crawlError = $state<string | null>(null);
 	let searchError = $state<string | null>(null);
+	let mapError = $state<string | null>(null);
+	let batchError = $state<string | null>(null);
+	let monitorError = $state<string | null>(null);
 
 	// Derived query for crawl status
 	const statusQuery = $derived(crawlId ? getCrawlStatus(crawlId) : null);
@@ -98,7 +132,7 @@
 	// History Management
 	type HistoryItem = {
 		id: string;
-		type: 'scrape' | 'crawl' | 'search';
+		type: 'scrape' | 'crawl' | 'search' | 'map' | 'batch' | 'monitor';
 		title: string;
 		url: string;
 		timestamp: string;
@@ -167,97 +201,131 @@
 	}
 </script>
 
-	{#snippet historyContent()}
-		<div class="flex h-full flex-col">
-			<!-- Header -->
-			<div class="flex items-center gap-2 border-b bg-background/50 p-4 backdrop-blur">
-				<History class="size-4 text-muted-foreground" />
-				<h2 class="text-sm font-semibold">History</h2>
-			</div>
-
-			<!-- History List -->
-			<div class="flex-1 space-y-2 overflow-y-auto p-3">
-				{#each searchHistory as item (item.id)}
-					<button
-						class="group relative w-full rounded-lg border bg-card p-3 text-left shadow-xs transition-all hover:border-primary/50 hover:shadow-sm {selectedHistoryItem?.id === item.id ? 'border-primary/40 bg-primary/[3%] shadow-sm' : 'border-border/60'}"
-						onclick={() => {
-							setActiveTab(item.type);
-							selectedHistoryItem = item;
-							if (item.type === 'crawl' && item.data?.id) {
-								crawlId = item.data.id;
-							}
-						}}
-					>
-						<div class="mb-1.5 flex items-center gap-2">
-							{#if item.type === 'scrape'}
-								<div class="flex size-5 items-center justify-center rounded bg-blue-500/10">
-									<Globe class="size-3 text-blue-500" />
-								</div>
-							{:else if item.type === 'crawl'}
-								<div class="flex size-5 items-center justify-center rounded bg-amber-500/10">
-									<Layers class="size-3 text-amber-500" />
-								</div>
-							{:else}
-								<div class="flex size-5 items-center justify-center rounded bg-primary/10">
-									<Search class="size-3 text-primary" />
-								</div>
-							{/if}
-							<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-								{item.type}
-							</span>
-							{#if item.meta}
-								{#if item.type === 'scrape' && item.meta.images > 0}
-									<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold">{item.meta.images} img</Badge>
-								{/if}
-								{#if item.type === 'scrape' && item.meta.screenshot}
-									<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold">ss</Badge>
-								{/if}
-								{#if item.type === 'search' && item.meta.count}
-									<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold">{item.meta.count}</Badge>
-								{/if}
-							{/if}
-						</div>
-						<div class="mb-0.5 truncate pr-4 text-xs font-semibold text-foreground">{item.title}</div>
-						{#if item.type === 'scrape' && item.url && item.url !== 'Unknown'}
-							{@const hostname = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })()}
-							{#if hostname}
-								<div class="truncate text-[11px] font-medium text-muted-foreground/80">{hostname}</div>
-							{/if}
-						{/if}
-						{#if item.preview}
-							<div class="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/70">{item.preview}</div>
-						{/if}
-						<div class="mt-2 flex items-center gap-1 border-t border-border/40 pt-1.5 text-[9px] font-medium text-muted-foreground/60">
-							<Clock class="size-2.5" />
-							{new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-							{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-						</div>
-					</button>
-				{:else}
-					<div
-						class="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50"
-					>
-						<History class="size-8 mb-2 stroke-[1px]" />
-						<p class="text-xs">No history yet</p>
-					</div>
-				{/each}
-			</div>
-
-			<!-- Footer: Clear History Action -->
-			<div class="border-t bg-background/50 p-3 backdrop-blur">
-				<Button
-					variant="destructive"
-					size="sm"
-					class="w-full"
-					onclick={() => clearHistory()}
-					title="Clear all history"
-				>
-					<Trash2 class="mr-2 size-3.5" />
-					Clear History
-				</Button>
-			</div>
+{#snippet historyContent()}
+	<div class="flex h-full flex-col">
+		<!-- Header -->
+		<div class="flex items-center gap-2 border-b bg-background/50 p-4 backdrop-blur">
+			<History class="size-4 text-muted-foreground" />
+			<h2 class="text-sm font-semibold">History</h2>
 		</div>
-	{/snippet}
+
+		<!-- History List -->
+		<div class="flex-1 space-y-2 overflow-y-auto p-3">
+			{#each searchHistory as item (item.id)}
+				<button
+					class="group relative w-full rounded-lg border bg-card p-3 text-left shadow-xs transition-all hover:border-primary/50 hover:shadow-sm {selectedHistoryItem?.id ===
+					item.id
+						? 'border-primary/40 bg-primary/3 shadow-sm'
+						: 'border-border/60'}"
+					onclick={() => {
+						setActiveTab(item.type);
+						selectedHistoryItem = item;
+						if (item.type === 'crawl' && item.data?.id) {
+							crawlId = item.data.id;
+						}
+					}}
+				>
+					<div class="mb-1.5 flex items-center gap-2">
+						{#if item.type === 'scrape'}
+							<div class="flex size-5 items-center justify-center rounded bg-blue-500/10">
+								<Globe class="size-3 text-blue-500" />
+							</div>
+						{:else if item.type === 'crawl'}
+							<div class="flex size-5 items-center justify-center rounded bg-amber-500/10">
+								<Layers class="size-3 text-amber-500" />
+							</div>
+						{:else if item.type === 'map'}
+							<div class="flex size-5 items-center justify-center rounded bg-emerald-500/10">
+								<Map class="size-3 text-emerald-500" />
+							</div>
+						{:else if item.type === 'batch'}
+							<div class="flex size-5 items-center justify-center rounded bg-violet-500/10">
+								<Package class="size-3 text-violet-500" />
+							</div>
+						{:else if item.type === 'monitor'}
+							<div class="flex size-5 items-center justify-center rounded bg-rose-500/10">
+								<Monitor class="size-3 text-rose-500" />
+							</div>
+						{:else}
+							<div class="flex size-5 items-center justify-center rounded bg-primary/10">
+								<Search class="size-3 text-primary" />
+							</div>
+						{/if}
+						<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+							{item.type}
+						</span>
+						{#if item.meta}
+							{#if item.type === 'scrape' && item.meta.images > 0}
+								<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold"
+									>{item.meta.images} img</Badge
+								>
+							{/if}
+							{#if item.type === 'scrape' && item.meta.screenshot}
+								<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold">ss</Badge>
+							{/if}
+							{#if item.type === 'search' && item.meta.count}
+								<Badge variant="secondary" class="h-4 rounded px-1 text-[8px] font-bold"
+									>{item.meta.count}</Badge
+								>
+							{/if}
+						{/if}
+					</div>
+					<div class="mb-0.5 truncate pr-4 text-xs font-semibold text-foreground">{item.title}</div>
+					{#if item.type === 'scrape' && item.url && item.url !== 'Unknown'}
+						{@const hostname = (() => {
+							try {
+								return new URL(item.url).hostname;
+							} catch {
+								return '';
+							}
+						})()}
+						{#if hostname}
+							<div class="truncate text-[11px] font-medium text-muted-foreground/80">
+								{hostname}
+							</div>
+						{/if}
+					{/if}
+					{#if item.preview}
+						<div class="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/70">
+							{item.preview}
+						</div>
+					{/if}
+					<div
+						class="mt-2 flex items-center gap-1 border-t border-border/40 pt-1.5 text-[9px] font-medium text-muted-foreground/60"
+					>
+						<Clock class="size-2.5" />
+						{new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+						{new Date(item.timestamp).toLocaleTimeString([], {
+							hour: '2-digit',
+							minute: '2-digit'
+						})}
+					</div>
+				</button>
+			{:else}
+				<div
+					class="flex flex-col items-center justify-center h-40 text-muted-foreground opacity-50"
+				>
+					<History class="size-8 mb-2 stroke-[1px]" />
+					<p class="text-xs">No history yet</p>
+				</div>
+			{/each}
+		</div>
+
+		<!-- Footer: Clear History Action -->
+		<div class="border-t bg-background/50 p-3 backdrop-blur">
+			<Button
+				variant="destructive"
+				size="sm"
+				class="w-full"
+				onclick={() => clearHistory()}
+				title="Clear all history"
+			>
+				<Trash2 class="mr-2 size-3.5" />
+				Clear History
+			</Button>
+		</div>
+	</div>
+{/snippet}
 
 <div class="flex flex-1 flex-col bg-background md:flex-row">
 	<!-- History Sidebar (Desktop Only) -->
@@ -313,18 +381,30 @@
 			</div>
 
 			<Tabs value={activeTab} onValueChange={setActiveTab} class="w-full">
-				<TabsList class="mb-8 grid w-full max-w-md grid-cols-3">
-					<TabsTrigger value="scrape" class="gap-2">
-						<Globe class="size-4" />
+				<TabsList class="mb-6 grid w-full max-w-3xl grid-cols-3 gap-1 sm:grid-cols-6">
+					<TabsTrigger value="scrape" class="gap-1.5 text-xs">
+						<Globe class="size-3.5" />
 						Scrape
 					</TabsTrigger>
-					<TabsTrigger value="crawl" class="gap-2">
-						<Layers class="size-4" />
+					<TabsTrigger value="crawl" class="gap-1.5 text-xs">
+						<Layers class="size-3.5" />
 						Crawl
 					</TabsTrigger>
-					<TabsTrigger value="search" class="gap-2">
-						<Search class="size-4" />
+					<TabsTrigger value="search" class="gap-1.5 text-xs">
+						<Search class="size-3.5" />
 						Search
+					</TabsTrigger>
+					<TabsTrigger value="map" class="gap-1.5 text-xs">
+						<Map class="size-3.5" />
+						Map
+					</TabsTrigger>
+					<TabsTrigger value="batch" class="gap-1.5 text-xs">
+						<Package class="size-3.5" />
+						Batch
+					</TabsTrigger>
+					<TabsTrigger value="monitor" class="gap-1.5 text-xs">
+						<Monitor class="size-3.5" />
+						Monitor
 					</TabsTrigger>
 				</TabsList>
 
@@ -360,6 +440,21 @@
 						{addToHistory}
 						{handleScrape}
 					/>
+				</TabsContent>
+
+				<!-- Map Tab Content -->
+				<TabsContent value="map" class="space-y-6 focus-visible:outline-none">
+					<MapTab bind:mapError bind:selectedHistoryItem {mapOptions} {addToHistory} />
+				</TabsContent>
+
+				<!-- Batch Tab Content -->
+				<TabsContent value="batch" class="space-y-6 focus-visible:outline-none">
+					<BatchTab bind:batchError bind:selectedHistoryItem {addToHistory} />
+				</TabsContent>
+
+				<!-- Monitor Tab Content -->
+				<TabsContent value="monitor" class="space-y-6 focus-visible:outline-none">
+					<MonitorTab bind:monitorError bind:selectedHistoryItem {monitorOptions} {addToHistory} />
 				</TabsContent>
 			</Tabs>
 		</div>

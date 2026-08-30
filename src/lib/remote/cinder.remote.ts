@@ -1,6 +1,6 @@
 import * as v from 'valibot';
-import { query, form, getRequestEvent } from '$app/server';
-import { PRIVATE_CINDER_BACKEND_URL } from '$env/static/private';
+import { query, form, command, getRequestEvent } from '$app/server';
+import { PRIVATE_CINDER_BACKEND_URL, PRIVATE_CINDER_API_KEY } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
 import { dev } from '$app/environment';
@@ -24,9 +24,10 @@ function getClientIP(): string {
 	}
 }
 
-// --- Types ---
+// --- Schemas ---
 
-// Scrape
+// Scrape — mirrors POST /v1/scrape (single url). Backend also supports urls[] sync batch (max 10)
+// but we expose that via batchScrape for clarity. All optional flags default per backend.
 const ScrapeOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
 	mode: v.optional(v.union([v.picklist(['smart', 'static', 'dynamic']), v.string()]), 'smart'),
@@ -34,30 +35,63 @@ const ScrapeOptionsSchema = v.object({
 	images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
 	image_format: v.optional(v.union([v.picklist(['url', 'blob']), v.string()]), 'url'),
 	max_images: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 10),
-	max_image_size_kb: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5120)
+	max_image_size_kb: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5120),
+	// Advanced — exposed via OptionsSheet JSON / toggles
+	summary: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	summary_sentences: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5),
+	redact_pii: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	block_ads: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()])),
+	remove_base64_images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()])),
+	include_links: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()])),
+	extract_schema: v.optional(v.string()),
+	actions: v.optional(v.string())
 });
 
-// Crawl
+// Crawl — POST /v1/crawl (async, Redis required)
 const CrawlOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
 	mode: v.optional(v.union([v.picklist(['smart', 'static', 'dynamic']), v.string()]), 'smart'),
 	maxDepth: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 2),
 	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 10),
 	screenshot: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
-	images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false)
+	images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	image_format: v.optional(v.union([v.picklist(['url', 'blob']), v.string()]), 'url'),
+	include_paths: v.optional(v.string()),
+	exclude_paths: v.optional(v.string()),
+	webhook_url: v.optional(v.pipe(v.string(), v.url()), ''),
+	webhook_secret: v.optional(v.string(), '')
 });
 
-// Search
+// Search — POST /v1/search (SearXNG primary, Brave fallback)
 const SearchOptionsSchema = v.object({
 	query: v.pipe(v.string(), v.nonEmpty('Query is required')),
 	mode: v.optional(v.union([v.string()]), 'default'),
 	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5),
 	offset: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
 	maxAge: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
-	// Array handling for hidden inputs
 	includeDomains: v.optional(v.union([v.array(v.string()), v.string()]), []),
 	excludeDomains: v.optional(v.union([v.array(v.string()), v.string()]), []),
 	requiredText: v.optional(v.union([v.array(v.string()), v.string()]), [])
+});
+
+// Map — POST /v1/map (sitemap → robots.txt → link fallback, no Redis)
+const MapOptionsSchema = v.object({
+	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
+	search: v.optional(v.string(), ''),
+	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 100)
+});
+
+// Batch — POST /v1/batch/scrape (async, Redis, max 20 urls)
+const BatchOptionsSchema = v.object({
+	urls: v.pipe(v.string(), v.nonEmpty('At least one URL is required'))
+});
+
+// Monitor — POST /v1/monitor (change tracking, Redis, interval >= 3600s)
+const MonitorOptionsSchema = v.object({
+	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
+	interval_seconds: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 3600),
+	webhook_url: v.optional(v.string(), ''),
+	webhook_secret: v.optional(v.string(), '')
 });
 
 // --- Helper ---
@@ -76,6 +110,10 @@ async function fetchCinder(endpoint: string, method: string, body?: any) {
 		'Content-Type': 'application/json'
 	};
 
+	// Attach API key when configured (Go backend uses X-API-Key)
+	if (PRIVATE_CINDER_API_KEY && PRIVATE_CINDER_API_KEY !== 'your_secret_key') {
+		headers['X-API-Key'] = PRIVATE_CINDER_API_KEY;
+	}
 
 	const bodyStr = body ? JSON.stringify(body) : undefined;
 
@@ -88,6 +126,12 @@ async function fetchCinder(endpoint: string, method: string, body?: any) {
 			headers,
 			body: bodyStr
 		});
+
+		// 204 No Content (e.g. DELETE /monitor/:id)
+		if (response.status === 204) {
+			console.log('[Cinder] Response 204 for', url);
+			return { success: true };
+		}
 
 		if (!response.ok) {
 			const errorText = await response.text();
@@ -122,55 +166,113 @@ async function fetchCinder(endpoint: string, method: string, body?: any) {
 		// Include more detail in the error for debugging
 		const detail = `Backend URL: ${PRIVATE_CINDER_BACKEND_URL} | Endpoint: ${endpoint} | Method: ${method}`;
 		const errorMsg = dev ? `${err.message} — ${detail}` : err.message;
+		// Preserve SvelteKit HttpError (e.g. 429) without wrapping
+		if (err?.status && err.status >= 400 && err.status < 600) throw err;
 		throw error(500, errorMsg || 'Internal Server Error');
 	}
 }
 
+// --- Helpers for payload normalization ---
+
+function parseJsonField(raw: string | undefined): any {
+	if (!raw || !raw.trim()) return undefined;
+	try {
+		return JSON.parse(raw);
+	} catch {
+		throw error(400, `Invalid JSON: ${raw.slice(0, 120)}`);
+	}
+}
+
+function splitCsv(raw: string | undefined): string[] | undefined {
+	if (!raw || !raw.trim()) return undefined;
+	return raw
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+}
+
+function splitLines(raw: string): string[] {
+	return raw
+		.split(/[\n,]+/)
+		.map((s) => s.trim())
+		.filter(Boolean);
+}
+
 // --- Remote Functions ---
 
-// 1. Scrape
+// 1. Scrape — POST /v1/scrape (sync, no Redis)
 export const scrapeUrl = form(ScrapeOptionsSchema, async (data) => {
-	// Transform valibot output to API expectation if needed
-	const result = await fetchCinder('/v1/scrape', 'POST', data);
+	const payload: Record<string, any> = { ...data };
+
+	// Advanced JSON fields come as strings from hidden inputs
+	if (typeof payload.extract_schema === 'string') {
+		const parsed = parseJsonField(payload.extract_schema);
+		if (parsed) payload.extract_schema = parsed;
+		else delete payload.extract_schema;
+	}
+	if (typeof payload.actions === 'string') {
+		const parsed = parseJsonField(payload.actions);
+		if (parsed) payload.actions = parsed;
+		else delete payload.actions;
+	}
+	// Remove empty optional booleans so backend defaults apply
+	if (payload.block_ads === undefined) delete payload.block_ads;
+	if (payload.remove_base64_images === undefined) delete payload.remove_base64_images;
+	if (payload.include_links === undefined) delete payload.include_links;
+
+	const result = await fetchCinder('/v1/scrape', 'POST', payload);
 	return result;
 });
 
-// 2. Crawl
+// 2. Crawl — POST /v1/crawl (async, Redis required)
 export const crawlUrl = form(CrawlOptionsSchema, async (data) => {
-	const result = await fetchCinder('/v1/crawl', 'POST', data);
-	return result; // Should return { id: "..." }
+	const payload: Record<string, any> = { ...data };
+	// Globs: comma-separated strings → arrays
+	if (typeof payload.include_paths === 'string') {
+		const arr = splitCsv(payload.include_paths);
+		if (arr) payload.include_paths = arr;
+		else delete payload.include_paths;
+	}
+	if (typeof payload.exclude_paths === 'string') {
+		const arr = splitCsv(payload.exclude_paths);
+		if (arr) payload.exclude_paths = arr;
+		else delete payload.exclude_paths;
+	}
+	if (!payload.webhook_url) delete payload.webhook_url;
+	if (!payload.webhook_secret) delete payload.webhook_secret;
+	if (!payload.image_format) delete payload.image_format;
+
+	const result = await fetchCinder('/v1/crawl', 'POST', payload);
+	return result; // { id, url, maxDepth, limit, ... }
 });
 
-export const getCrawlStatus = query(
-	v.string(), // ID
-	async (id) => {
-		const res = await fetchCinder(`/v1/crawl/${id}`, 'GET');
-		// The Go backend (asynq) returns `state` and a serialized `result` string when complete.
-		let parsedResult = null;
-		if (res && res.result) {
-			try {
-				parsedResult = JSON.parse(res.result);
-			} catch {
-				// Result is a plain string message (e.g. "Scraped URL successfully")
-				parsedResult = { message: res.result };
-			}
+export const getCrawlStatus = query(v.string(), async (id) => {
+	const res = await fetchCinder(`/v1/crawl/${id}`, 'GET');
+	// Backend returns { id, queue, state, crawl?, failed_urls?, result? }
+	// Older shape used `result` JSON string — handle both
+	let parsedResult: any = res.crawl ?? null;
+	if (!parsedResult && res.result) {
+		try {
+			parsedResult = JSON.parse(res.result);
+		} catch {
+			parsedResult = { message: res.result };
 		}
-
-		// Determine if crawl internally failed despite state=completed
-		const crawlFailed = parsedResult?.status === 'failed' || (parsedResult?.failedUrls?.length > 0 && parsedResult?.total === 0);
-
-		return {
-			...res,
-			parsedResult,
-			crawlFailed,
-			failedUrls: parsedResult?.failedUrls || []
-		};
 	}
-);
+	const crawlFailed =
+		parsedResult?.status === 'failed' ||
+		(res.state === 'failed' && !parsedResult) ||
+		(parsedResult?.failedUrls?.length > 0 && parsedResult?.total === 0);
 
-// 3. Search
+	return {
+		...res,
+		parsedResult,
+		crawlFailed,
+		failedUrls: parsedResult?.failedUrls || res.failed_urls || []
+	};
+});
+
+// 3. Search — POST /v1/search (SearXNG primary, Brave fallback)
 export const searchWeb = form(SearchOptionsSchema, async (data) => {
-	// Enforce daily search limit (authenticated users bypass)
 	if (!isAuthenticated()) {
 		try {
 			const ip = getClientIP();
@@ -179,15 +281,88 @@ export const searchWeb = form(SearchOptionsSchema, async (data) => {
 			throw error(429, 'Daily search limit reached. Please try again tomorrow.');
 		}
 	}
-
-	// Pre-process array fields that might come as comma-separated strings
 	const processedData = {
 		...data,
-		includeDomains: typeof data.includeDomains === 'string' && data.includeDomains ? data.includeDomains.split(',').map(s => s.trim()) : Array.isArray(data.includeDomains) ? data.includeDomains : [],
-		excludeDomains: typeof data.excludeDomains === 'string' && data.excludeDomains ? data.excludeDomains.split(',').map(s => s.trim()) : Array.isArray(data.excludeDomains) ? data.excludeDomains : [],
-		requiredText: typeof data.requiredText === 'string' && data.requiredText ? data.requiredText.split(',').map(s => s.trim()) : Array.isArray(data.requiredText) ? data.requiredText : [],
+		includeDomains:
+			typeof data.includeDomains === 'string' && data.includeDomains
+				? data.includeDomains.split(',').map((s) => s.trim())
+				: Array.isArray(data.includeDomains)
+					? data.includeDomains
+					: [],
+		excludeDomains:
+			typeof data.excludeDomains === 'string' && data.excludeDomains
+				? data.excludeDomains.split(',').map((s) => s.trim())
+				: Array.isArray(data.excludeDomains)
+					? data.excludeDomains
+					: [],
+		requiredText:
+			typeof data.requiredText === 'string' && data.requiredText
+				? data.requiredText.split(',').map((s) => s.trim())
+				: Array.isArray(data.requiredText)
+					? data.requiredText
+					: []
 	};
-
 	const result = await fetchCinder('/v1/search', 'POST', processedData);
 	return result.results;
+});
+
+// 4. Map — POST /v1/map (no Redis, sitemap → robots.txt → link fallback)
+export const mapSite = form(MapOptionsSchema, async (data) => {
+	const payload: Record<string, any> = { url: data.url };
+	if (data.search) payload.search = data.search;
+	if (data.limit) payload.limit = data.limit;
+	const result = await fetchCinder('/v1/map', 'POST', payload);
+	return result as { url: string; count: number; links: { url: string; title?: string }[] };
+});
+
+// 5. Batch — POST /v1/batch/scrape (async, Redis, max 20)
+export const batchScrape = form(BatchOptionsSchema, async (data) => {
+	const urls = splitLines(data.urls);
+	if (urls.length === 0) throw error(400, 'At least one URL is required');
+	if (urls.length > 20) throw error(400, 'Too many URLs (max 20)');
+	for (const u of urls) {
+		try {
+			const parsed = new URL(u);
+			if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+		} catch {
+			throw error(400, `Invalid URL: ${u}`);
+		}
+	}
+	const result = await fetchCinder('/v1/batch/scrape', 'POST', { urls });
+	return result as { batch_id: string; tasks: { id: string; url: string }[] };
+});
+
+export const getBatchStatus = query(v.string(), async (id) => {
+	const res = await fetchCinder(`/v1/batch/${id}`, 'GET');
+	return res as { batch_id: string; total: number; completed: number; failed: number; tasks: { id: string; url: string }[] };
+});
+
+// 6. Monitor — POST /v1/monitor (change tracking, Redis, interval >= 3600)
+export const createMonitor = form(MonitorOptionsSchema, async (data) => {
+	const payload: Record<string, any> = {
+		url: data.url,
+		interval_seconds: data.interval_seconds || 3600
+	};
+	if (payload.interval_seconds < 3600) throw error(400, 'interval_seconds must be at least 3600');
+	if (data.webhook_url) payload.webhook_url = data.webhook_url;
+	if (data.webhook_secret) payload.webhook_secret = data.webhook_secret;
+	const result = await fetchCinder('/v1/monitor', 'POST', payload);
+	return result as { id: string; url: string; interval_seconds: number; next_check: string };
+});
+
+export const getMonitorStatus = query(v.string(), async (id) => {
+	const res = await fetchCinder(`/v1/monitor/${id}`, 'GET');
+	return res as {
+		id: string;
+		url: string;
+		interval_seconds: number;
+		webhook_url?: string;
+		last_hash?: string;
+		next_check: string;
+	};
+});
+
+export const deleteMonitor = command(v.string(), async (id) => {
+	const res = await fetchCinder(`/v1/monitor/${id}`, 'DELETE');
+	return res;
 });

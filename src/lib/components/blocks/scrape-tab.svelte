@@ -90,6 +90,28 @@
 					<input type="hidden" name="image_format" value={scrapeOptions.current.image_format || 'url'} />
 					<input type="hidden" name="max_images" value={scrapeOptions.current.max_images || 10} />
 					<input type="hidden" name="max_image_size_kb" value={scrapeOptions.current.max_image_size_kb || 5120} />
+					{#if scrapeOptions.current.summary}
+						<input type="hidden" name="summary" value="on" />
+					{/if}
+					<input type="hidden" name="summary_sentences" value={scrapeOptions.current.summary_sentences ?? 5} />
+					{#if scrapeOptions.current.redact_pii}
+						<input type="hidden" name="redact_pii" value="on" />
+					{/if}
+					{#if scrapeOptions.current.block_ads}
+						<input type="hidden" name="block_ads" value="on" />
+					{/if}
+					{#if scrapeOptions.current.remove_base64_images}
+						<input type="hidden" name="remove_base64_images" value="on" />
+					{/if}
+					{#if scrapeOptions.current.include_links}
+						<input type="hidden" name="include_links" value="on" />
+					{/if}
+					{#if scrapeOptions.current.extract_schema}
+						<input type="hidden" name="extract_schema" value={scrapeOptions.current.extract_schema} />
+					{/if}
+					{#if scrapeOptions.current.actions}
+						<input type="hidden" name="actions" value={scrapeOptions.current.actions} />
+					{/if}
 					<OptionsSheet bind:options={scrapeOptions.current} type="scrape" />
 					<Button type="submit" disabled={!!scrapeUrl.pending} class="h-11 px-8 shadow-md">
 						{#if scrapeUrl.pending}
