@@ -36,27 +36,52 @@
 					await submit();
 					if (scrapeUrl.result) {
 						const r = scrapeUrl.result as any;
-						const resultUrl = r.url || '';
-						const hostname = extractHostname(resultUrl);
-						const title = r.metadata?.title || hostname || 'Scraped Page';
-						const preview = r.metadata?.description || r.markdown?.slice(0, 100).replace(/\n/g, ' ') || '';
-						addToHistory({
-							id: crypto.randomUUID(),
-							type: 'scrape',
-							title,
-							url: resultUrl,
-							timestamp: new Date().toISOString(),
-							preview: preview.slice(0, 120),
-							meta: {
-								images: r.images?.length || 0,
-								links: r.links?.length || 0,
-								screenshot: !!(r.screenshot?.blob || r.screenshot?.url)
-							},
-							data: scrapeUrl.result
-						});
+						// Sync multi-URL returns {results: [...]}
+						if (r.results && Array.isArray(r.results)) {
+							const ok = r.results.filter((x: any) => !x.error).length;
+							const failed = r.results.length - ok;
+							addToHistory({
+								id: crypto.randomUUID(),
+								type: 'scrape',
+								title: `Batch ${r.results.length} URLs (${ok} ok${failed ? `, ${failed} failed` : ''})`,
+								url: r.results[0]?.url || 'Multi-scrape',
+								timestamp: new Date().toISOString(),
+								preview: r.results
+									.slice(0, 2)
+									.map((x: any) => x.title || x.url)
+									.join(' · ')
+									.slice(0, 120),
+								meta: {
+									count: r.results.length,
+									images: r.results.reduce((a: number, x: any) => a + (x.images?.length || 0), 0),
+									links: r.results.reduce((a: number, x: any) => a + (x.links?.length || 0), 0)
+								},
+								data: scrapeUrl.result
+							});
+						} else {
+							const resultUrl = r.url || '';
+							const hostname = extractHostname(resultUrl);
+							const title = r.metadata?.title || hostname || 'Scraped Page';
+							const preview =
+								r.metadata?.description || r.markdown?.slice(0, 100).replace(/\n/g, ' ') || '';
+							addToHistory({
+								id: crypto.randomUUID(),
+								type: 'scrape',
+								title,
+								url: resultUrl,
+								timestamp: new Date().toISOString(),
+								preview: preview.slice(0, 120),
+								meta: {
+									images: r.images?.length || 0,
+									links: r.links?.length || 0,
+									screenshot: !!(r.screenshot?.blob || r.screenshot?.url)
+								},
+								data: scrapeUrl.result
+							});
+						}
 					}
 				} catch (e: any) {
-					scrapeError = e.message || 'An unexpected error occurred';
+					scrapeError = e.body?.message || e.message || 'An unexpected error occurred';
 				}
 			})}
 			class="space-y-4"
@@ -87,30 +112,55 @@
 					{#if scrapeOptions.current.images}
 						<input type="hidden" name="images" value="on" />
 					{/if}
-					<input type="hidden" name="image_format" value={scrapeOptions.current.image_format || 'url'} />
+					<input
+						type="hidden"
+						name="image_format"
+						value={scrapeOptions.current.image_format || 'url'}
+					/>
 					<input type="hidden" name="max_images" value={scrapeOptions.current.max_images || 10} />
-					<input type="hidden" name="max_image_size_kb" value={scrapeOptions.current.max_image_size_kb || 5120} />
+					<input
+						type="hidden"
+						name="max_image_size_kb"
+						value={scrapeOptions.current.max_image_size_kb || 5120}
+					/>
 					{#if scrapeOptions.current.summary}
 						<input type="hidden" name="summary" value="on" />
 					{/if}
-					<input type="hidden" name="summary_sentences" value={scrapeOptions.current.summary_sentences ?? 5} />
+					<input
+						type="hidden"
+						name="summary_sentences"
+						value={scrapeOptions.current.summary_sentences ?? 5}
+					/>
 					{#if scrapeOptions.current.redact_pii}
 						<input type="hidden" name="redact_pii" value="on" />
 					{/if}
-					{#if scrapeOptions.current.block_ads}
-						<input type="hidden" name="block_ads" value="on" />
-					{/if}
-					{#if scrapeOptions.current.remove_base64_images}
-						<input type="hidden" name="remove_base64_images" value="on" />
-					{/if}
-					{#if scrapeOptions.current.include_links}
-						<input type="hidden" name="include_links" value="on" />
-					{/if}
+					<input
+						type="hidden"
+						name="block_ads"
+						value={scrapeOptions.current.block_ads ? 'on' : 'off'}
+					/>
+					<input
+						type="hidden"
+						name="remove_base64_images"
+						value={scrapeOptions.current.remove_base64_images ? 'on' : 'off'}
+					/>
+					<input
+						type="hidden"
+						name="include_links"
+						value={scrapeOptions.current.include_links ? 'on' : 'off'}
+					/>
 					{#if scrapeOptions.current.extract_schema}
-						<input type="hidden" name="extract_schema" value={scrapeOptions.current.extract_schema} />
+						<input
+							type="hidden"
+							name="extract_schema"
+							value={scrapeOptions.current.extract_schema}
+						/>
 					{/if}
 					{#if scrapeOptions.current.actions}
 						<input type="hidden" name="actions" value={scrapeOptions.current.actions} />
+					{/if}
+					{#if scrapeOptions.current.urls}
+						<input type="hidden" name="urls" value={scrapeOptions.current.urls} />
 					{/if}
 					<OptionsSheet bind:options={scrapeOptions.current} type="scrape" />
 					<Button type="submit" disabled={!!scrapeUrl.pending} class="h-11 px-8 shadow-md">
@@ -134,16 +184,25 @@
 	</div>
 
 	<div
-		class="flex items-center justify-between border-t bg-muted/10 p-4 px-6 text-[11px] font-medium text-muted-foreground"
+		class="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/10 p-4 px-6 text-[11px] font-medium text-muted-foreground"
 	>
-		<div class="flex items-center gap-4">
+		<div class="flex flex-wrap items-center gap-2">
 			<span class="flex items-center gap-1.5"
 				><Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase">Format</Badge> Markdown</span
 			>
 			<span class="flex items-center gap-1.5"
-				><Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase">Engine</Badge> Cinder
-				v1</span
-			>
+				><Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase">Links</Badge>
+				{#if scrapeOptions.current.include_links === false}
+					<span class="text-muted-foreground/60">off</span>
+				{:else}
+					<span class="text-emerald-600">on</span>
+				{/if}
+			</span>
+			{#if scrapeOptions.current.urls}
+				<Badge variant="secondary" class="h-5 rounded px-1.5 text-[9px] uppercase"
+					>Sync batch {scrapeOptions.current.urls.split(/[\n,]+/).filter(Boolean).length} URLs</Badge
+				>
+			{/if}
 		</div>
 		<span>Ready for extraction</span>
 	</div>

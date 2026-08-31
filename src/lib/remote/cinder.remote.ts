@@ -26,23 +26,104 @@ function getClientIP(): string {
 
 // --- Schemas ---
 
-// Scrape — mirrors POST /v1/scrape (single url). Backend also supports urls[] sync batch (max 10)
-// but we expose that via batchScrape for clarity. All optional flags default per backend.
+// Scrape — mirrors POST /v1/scrape (single url OR sync multi-URL urls[] max 10, exclusive).
+// Backend: POST /v1/scrape with {urls: [...]} returns {results: [{url, markdown, ...}]} sync, errgroup limit 5, no Redis.
+// include_links defaults to true (Firecrawl parity), block_ads/remove_base64_images default true.
 const ScrapeOptionsSchema = v.object({
-	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
+	url: v.optional(v.pipe(v.string(), v.url()), ''),
+	urls: v.optional(v.string(), ''),
 	mode: v.optional(v.union([v.picklist(['smart', 'static', 'dynamic']), v.string()]), 'smart'),
-	screenshot: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
-	images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	screenshot: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		false
+	),
+	images: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		false
+	),
 	image_format: v.optional(v.union([v.picklist(['url', 'blob']), v.string()]), 'url'),
-	max_images: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 10),
-	max_image_size_kb: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5120),
+	max_images: v.optional(
+		v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]),
+		10
+	),
+	max_image_size_kb: v.optional(
+		v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]),
+		5120
+	),
 	// Advanced — exposed via OptionsSheet JSON / toggles
-	summary: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
-	summary_sentences: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5),
-	redact_pii: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
-	block_ads: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()])),
-	remove_base64_images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()])),
-	include_links: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()])),
+	summary: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		false
+	),
+	summary_sentences: v.optional(
+		v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]),
+		5
+	),
+	redact_pii: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		false
+	),
+	block_ads: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		true
+	),
+	remove_base64_images: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		true
+	),
+	include_links: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		true
+	),
 	extract_schema: v.optional(v.string()),
 	actions: v.optional(v.string())
 });
@@ -51,10 +132,33 @@ const ScrapeOptionsSchema = v.object({
 const CrawlOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
 	mode: v.optional(v.union([v.picklist(['smart', 'static', 'dynamic']), v.string()]), 'smart'),
-	maxDepth: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 2),
+	maxDepth: v.optional(
+		v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]),
+		2
+	),
 	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 10),
-	screenshot: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
-	images: v.optional(v.union([v.pipe(v.string(), v.transform((v) => v === 'on' || v === 'true'), v.boolean()), v.boolean()]), false),
+	screenshot: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		false
+	),
+	images: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		false
+	),
 	image_format: v.optional(v.union([v.picklist(['url', 'blob']), v.string()]), 'url'),
 	include_paths: v.optional(v.string()),
 	exclude_paths: v.optional(v.string()),
@@ -63,9 +167,22 @@ const CrawlOptionsSchema = v.object({
 });
 
 // Search — POST /v1/search (SearXNG primary, Brave fallback)
+// New: category (general|news|code) maps to SearXNG categories + Brave search_type, rerank (TF-IDF), highlights per hit.
 const SearchOptionsSchema = v.object({
 	query: v.pipe(v.string(), v.nonEmpty('Query is required')),
 	mode: v.optional(v.union([v.string()]), 'default'),
+	category: v.optional(v.union([v.picklist(['general', 'news', 'code']), v.string()]), ''),
+	rerank: v.optional(
+		v.union([
+			v.pipe(
+				v.string(),
+				v.transform((v) => v === 'on' || v === 'true'),
+				v.boolean()
+			),
+			v.boolean()
+		]),
+		false
+	),
 	limit: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 5),
 	offset: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
 	maxAge: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 0),
@@ -89,7 +206,10 @@ const BatchOptionsSchema = v.object({
 // Monitor — POST /v1/monitor (change tracking, Redis, interval >= 3600s)
 const MonitorOptionsSchema = v.object({
 	url: v.pipe(v.string(), v.url(), v.nonEmpty('URL is required')),
-	interval_seconds: v.optional(v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]), 3600),
+	interval_seconds: v.optional(
+		v.union([v.pipe(v.string(), v.transform(Number), v.number()), v.number()]),
+		3600
+	),
 	webhook_url: v.optional(v.string(), ''),
 	webhook_secret: v.optional(v.string(), '')
 });
@@ -151,7 +271,7 @@ async function fetchCinder(endpoint: string, method: string, body?: any) {
 			if (body?.render === true && errorMessage === 'Scraping failed') {
 				throw new Error(
 					'Scraping failed — headless browser mode (render) is not available on this server. ' +
-					'Try turning OFF the "Browser Rendering" toggle in Advanced Options and scrape again.'
+						'Try turning OFF the "Browser Rendering" toggle in Advanced Options and scrape again.'
 				);
 			}
 
@@ -201,8 +321,31 @@ function splitLines(raw: string): string[] {
 // --- Remote Functions ---
 
 // 1. Scrape — POST /v1/scrape (sync, no Redis)
+// Supports single url OR sync multi-URL urls[] (max 10, exclusive) → {results: [...]} with per-entry error.
 export const scrapeUrl = form(ScrapeOptionsSchema, async (data) => {
 	const payload: Record<string, any> = { ...data };
+
+	// Sync multi-URL: urls textarea (one per line or comma) → urls[] exclusive with url
+	const rawUrls = typeof payload.urls === 'string' ? payload.urls.trim() : '';
+	if (rawUrls) {
+		const urls = splitLines(rawUrls);
+		if (urls.length === 0) throw error(400, 'At least one URL is required in urls');
+		if (urls.length > 10)
+			throw error(400, 'Too many URLs (max 10) for sync scrape — use Batch tab for up to 20 async');
+		for (const u of urls) {
+			try {
+				const parsed = new URL(u);
+				if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+			} catch {
+				throw error(400, `Invalid URL in urls: ${u}`);
+			}
+		}
+		delete payload.url;
+		payload.urls = urls;
+	} else {
+		delete payload.urls;
+		if (!payload.url) throw error(400, 'URL is required');
+	}
 
 	// Advanced JSON fields come as strings from hidden inputs
 	if (typeof payload.extract_schema === 'string') {
@@ -215,10 +358,11 @@ export const scrapeUrl = form(ScrapeOptionsSchema, async (data) => {
 		if (parsed) payload.actions = parsed;
 		else delete payload.actions;
 	}
-	// Remove empty optional booleans so backend defaults apply
-	if (payload.block_ads === undefined) delete payload.block_ads;
-	if (payload.remove_base64_images === undefined) delete payload.remove_base64_images;
-	if (payload.include_links === undefined) delete payload.include_links;
+	// Backend defaults: include_links/block_ads/remove_base64_images default true — only send when explicitly false
+	// Valibot defaults already set them to true, so we always send them; backend cache key includes include_links
+	if (payload.block_ads === undefined) payload.block_ads = true;
+	if (payload.remove_base64_images === undefined) payload.remove_base64_images = true;
+	if (payload.include_links === undefined) payload.include_links = true;
 
 	const result = await fetchCinder('/v1/scrape', 'POST', payload);
 	return result;
@@ -272,6 +416,7 @@ export const getCrawlStatus = query(v.string(), async (id) => {
 });
 
 // 3. Search — POST /v1/search (SearXNG primary, Brave fallback)
+// Now: category (general|news|code) + rerank (TF-IDF) + highlights/relevance per hit
 export const searchWeb = form(SearchOptionsSchema, async (data) => {
 	if (!isAuthenticated()) {
 		try {
@@ -281,7 +426,11 @@ export const searchWeb = form(SearchOptionsSchema, async (data) => {
 			throw error(429, 'Daily search limit reached. Please try again tomorrow.');
 		}
 	}
-	const processedData = {
+	// Validate category enum server-side (backend also validates, but fail fast)
+	if (data.category && !['general', 'news', 'code'].includes(data.category)) {
+		throw error(400, 'Invalid category: must be one of general, news, code');
+	}
+	const processedData: Record<string, any> = {
 		...data,
 		includeDomains:
 			typeof data.includeDomains === 'string' && data.includeDomains
@@ -302,8 +451,20 @@ export const searchWeb = form(SearchOptionsSchema, async (data) => {
 					? data.requiredText
 					: []
 	};
+	// Only send category/rerank when set so cache keys stay stable
+	if (!processedData.category) delete processedData.category;
+	if (!processedData.rerank) delete processedData.rerank;
+
 	const result = await fetchCinder('/v1/search', 'POST', processedData);
-	return result.results;
+	return result.results as {
+		title: string;
+		url: string;
+		description: string;
+		highlights?: string[];
+		relevance?: number;
+		domain?: string;
+		id?: string;
+	}[];
 });
 
 // 4. Map — POST /v1/map (no Redis, sitemap → robots.txt → link fallback)
@@ -334,7 +495,13 @@ export const batchScrape = form(BatchOptionsSchema, async (data) => {
 
 export const getBatchStatus = query(v.string(), async (id) => {
 	const res = await fetchCinder(`/v1/batch/${id}`, 'GET');
-	return res as { batch_id: string; total: number; completed: number; failed: number; tasks: { id: string; url: string }[] };
+	return res as {
+		batch_id: string;
+		total: number;
+		completed: number;
+		failed: number;
+		tasks: { id: string; url: string }[];
+	};
 });
 
 // 6. Monitor — POST /v1/monitor (change tracking, Redis, interval >= 3600)

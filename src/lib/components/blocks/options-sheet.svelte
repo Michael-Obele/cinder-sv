@@ -154,6 +154,21 @@
 							rows={3}
 						/>
 					</div>
+					<div class="grid grid-cols-4 items-start gap-4">
+						<Label class="pt-2 text-right text-xs leading-tight"
+							>Sync Multi-URL (one per line)</Label
+						>
+						<Textarea
+							bind:value={options.urls}
+							class="col-span-3 font-mono text-xs"
+							placeholder={'https://example.com\nhttps://example.org'}
+							rows={3}
+						/>
+					</div>
+					<p class="pl-2 text-[11px] text-muted-foreground">
+						When filled, <span class="font-mono">urls[]</span> is sent (max 10, exclusive with single
+						URL) — sync, no Redis, limit 5 parallel. Leave empty for single-URL scrape.
+					</p>
 				</div>
 			{/if}
 
@@ -348,6 +363,42 @@
 						>
 					</div>
 				</div>
+				<div class="grid grid-cols-4 items-center gap-4">
+					<Label class="text-right text-xs">Category</Label>
+					<div class="col-span-3 flex shrink-0 flex-wrap items-center justify-start gap-1">
+						<Button
+							size="sm"
+							variant={!options.category ? 'default' : 'outline'}
+							onclick={() => (options.category = '')}>All</Button
+						>
+						<Button
+							size="sm"
+							variant={options.category === 'general' ? 'default' : 'outline'}
+							onclick={() => (options.category = 'general')}>General</Button
+						>
+						<Button
+							size="sm"
+							variant={options.category === 'news' ? 'default' : 'outline'}
+							onclick={() => (options.category = 'news')}>News</Button
+						>
+						<Button
+							size="sm"
+							variant={options.category === 'code' ? 'default' : 'outline'}
+							onclick={() => (options.category = 'code')}>Code</Button
+						>
+					</div>
+				</div>
+				<p class="pl-2 text-[11px] text-muted-foreground">
+					Category maps to SearXNG <span class="font-mono">categories</span> (general/news/it) +
+					Brave <span class="font-mono">search_type</span>. Validated enum.
+				</p>
+				<div class="grid grid-cols-4 items-center gap-4">
+					<Label class="text-right text-xs">TF-IDF Rerank</Label>
+					<div class="col-span-3"><Switch bind:checked={options.rerank} /></div>
+				</div>
+				<p class="pl-2 text-[11px] text-muted-foreground">
+					Lightweight pure-Go rerank (no ONNX) — reorders by query-term TF-IDF. Opt-in.
+				</p>
 				<div class="grid grid-cols-4 items-center gap-4">
 					<Label class="text-right">Result Limit</Label>
 					<Input type="number" bind:value={options.limit} class="col-span-3" placeholder="5" />

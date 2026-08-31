@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { Search, Loader2, AlertCircle, ArrowRight, ExternalLink, Globe } from '@lucide/svelte';
+	import {
+		Search,
+		Loader2,
+		AlertCircle,
+		ArrowRight,
+		ExternalLink,
+		Globe,
+		Sparkles
+	} from '@lucide/svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
@@ -63,6 +71,12 @@
 						/>
 					</div>
 					<input type="hidden" name="mode" value={searchOptions.current.mode} />
+					{#if searchOptions.current.category}
+						<input type="hidden" name="category" value={searchOptions.current.category} />
+					{/if}
+					{#if searchOptions.current.rerank}
+						<input type="hidden" name="rerank" value="on" />
+					{/if}
 					<input type="hidden" name="limit" value={searchOptions.current.limit} />
 					<input type="hidden" name="offset" value={searchOptions.current.offset} />
 					<input type="hidden" name="maxAge" value={searchOptions.current.maxAge} />
@@ -108,12 +122,21 @@
 	>
 		<div class="flex items-center gap-4">
 			<span class="flex items-center gap-1.5">
-				<Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase">Engine</Badge> Search
-				API
+				<Badge variant="outline" class="h-5 rounded px-1.5 text-[9px] uppercase">Engine</Badge> SearXNG
+				→ Brave fallback
 			</span>
-			<span class="flex items-center gap-1.5">Mode: Semantic Discovery</span>
+			{#if searchOptions.current.category}
+				<span class="flex items-center gap-1.5"
+					><Badge variant="secondary" class="h-5 rounded px-1.5 text-[9px] uppercase"
+						>{searchOptions.current.category}</Badge
+					></span
+				>
+			{/if}
+			{#if searchOptions.current.rerank}
+				<span class="flex items-center gap-1.5"><Sparkles class="size-3" /> TF-IDF rerank</span>
+			{/if}
 		</div>
-		<span>Search systems active</span>
+		<span>Highlights + relevance per hit</span>
 	</div>
 </section>
 
@@ -155,9 +178,28 @@
 					>
 						{item.title}
 					</h4>
-					<p class="mb-4 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+					{#if item.highlights?.length}
+						<div
+							class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+						>
+							{#each item.highlights as h}
+								<span class="italic">"{h}"</span>
+							{/each}
+						</div>
+					{/if}
+					<p class="mb-3 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
 						{item.description || 'No description provided.'}
 					</p>
+					{#if item.relevance !== undefined}
+						<div class="mb-2 flex items-center gap-1.5">
+							<Badge variant="outline" class="h-5 rounded px-1.5 font-mono text-[9px]"
+								>rel {Number(item.relevance).toFixed(2)}</Badge
+							>
+							{#if item.domain}<span class="font-mono text-[10px] text-muted-foreground"
+									>{item.domain}</span
+								>{/if}
+						</div>
+					{/if}
 				</div>
 				<div class="mt-auto flex items-center justify-between border-t pt-3">
 					<span class="max-w-30 truncate font-mono text-[10px] text-muted-foreground"

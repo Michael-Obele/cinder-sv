@@ -24,12 +24,37 @@
 		!result ? 'markdown' : hasImages ? 'images' : hasScreenshot ? 'screenshot' : 'markdown'
 	);
 
+	let isMulti = $derived(!!result?.results && Array.isArray(result.results));
+
+	function formatLinks(links: any): string {
+		if (!links || links.length === 0) return '';
+		if (typeof links[0] === 'string') return links.join('\n');
+		return links
+			.map((l: any) =>
+				l.url
+					? `${l.url}${l.text ? ` — ${l.text}` : ''}${l.isInternal ? ' (internal)' : ''}`
+					: JSON.stringify(l)
+			)
+			.join('\n');
+	}
+
 	function copyToClipboard() {
 		let content = '';
-		if (activeTab === 'markdown') content = result.markdown;
-		else if (activeTab === 'html') content = result.html;
-		else if (activeTab === 'json') content = JSON.stringify(result, null, 2);
-		else if (activeTab === 'links') content = (result.links || []).join('\n');
+		if (activeTab === 'markdown') {
+			content = isMulti
+				? result.results
+						.map((r: any) => `# ${r.url}\n\n${r.markdown || r.error || ''}`)
+						.join('\n\n---\n\n')
+				: result.markdown;
+		} else if (activeTab === 'html') {
+			content = isMulti ? result.results.map((r: any) => r.html || '').join('\n\n') : result.html;
+		} else if (activeTab === 'json') content = JSON.stringify(result, null, 2);
+		else if (activeTab === 'links') {
+			const links = isMulti
+				? result.results.flatMap((r: any) => r.links || [])
+				: result.links || [];
+			content = formatLinks(links);
+		}
 
 		navigator.clipboard.writeText(content || '');
 		copied = true;
@@ -55,10 +80,14 @@
 				<Tabs.Trigger value="json">JSON</Tabs.Trigger>
 				<Tabs.Trigger value="links">Links</Tabs.Trigger>
 				{#if hasImages}
-					<Tabs.Trigger value="images" class="gap-1.5"><Image class="size-3.5" /> Images</Tabs.Trigger>
+					<Tabs.Trigger value="images" class="gap-1.5"
+						><Image class="size-3.5" /> Images</Tabs.Trigger
+					>
 				{/if}
 				{#if hasScreenshot}
-					<Tabs.Trigger value="screenshot" class="gap-1.5"><Camera class="size-3.5" /> Screenshot</Tabs.Trigger>
+					<Tabs.Trigger value="screenshot" class="gap-1.5"
+						><Camera class="size-3.5" /> Screenshot</Tabs.Trigger
+					>
 				{/if}
 			</Tabs.List>
 
@@ -84,13 +113,61 @@
 
 		<div class="relative min-h-0 flex-1">
 			<ScrollArea class="h-144 p-4">
+				{#if isMulti}
+					<div class="mb-3 flex flex-wrap items-center gap-2">
+						<Badge variant="secondary" class="text-[10px]">{result.results.length} URLs</Badge>
+						<Badge variant="outline" class="text-[10px]"
+							>{result.results.filter((r: any) => !r.error).length} ok</Badge
+						>
+						{#if result.results.some((r: any) => r.error)}<Badge
+								variant="destructive"
+								class="text-[10px]"
+								>{result.results.filter((r: any) => r.error).length} failed</Badge
+							>{/if}
+					</div>
+				{/if}
 				<Tabs.Content value="markdown" class="mt-0">
-					<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{result.markdown ||
-							'No Markdown content'}</pre>
+					{#if isMulti}
+						<div class="space-y-6">
+							{#each result.results as item (item.url)}
+								<div class="rounded-lg border bg-background p-3">
+									<div class="mb-2 flex items-center gap-2">
+										<Badge variant={item.error ? 'destructive' : 'outline'} class="text-[10px]"
+											>{item.url}</Badge
+										>
+										{#if item.word_count}<span class="text-[10px] text-muted-foreground"
+												>{item.word_count} words</span
+											>{/if}
+										{#if item.error}<span class="text-xs text-destructive">{item.error}</span>{/if}
+									</div>
+									<pre
+										class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{item.markdown ||
+											'No markdown'}</pre>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<pre
+							class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{result.markdown ||
+								'No Markdown content'}</pre>
+					{/if}
 				</Tabs.Content>
 				<Tabs.Content value="html" class="mt-0">
-					<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{result.html ||
-							'No HTML content'}</pre>
+					{#if isMulti}
+						<div class="space-y-4">
+							{#each result.results as item (item.url)}
+								<div class="rounded-lg border bg-background p-3">
+									<div class="mb-2 font-mono text-xs text-muted-foreground">{item.url}</div>
+									<pre
+										class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{item.html ||
+											'No HTML'}</pre>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{result.html ||
+								'No HTML content'}</pre>
+					{/if}
 				</Tabs.Content>
 				<Tabs.Content value="json" class="mt-0">
 					<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{JSON.stringify(
@@ -100,9 +177,16 @@
 						)}</pre>
 				</Tabs.Content>
 				<Tabs.Content value="links" class="mt-0">
-					<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{(
-							result.links || []
-						).join('\n') || 'No links found'}</pre>
+					{#if isMulti}
+						{@const allLinks = result.results.flatMap((r: any) => r.links || [])}
+						<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{formatLinks(
+								allLinks
+							) || 'No links found'}</pre>
+					{:else}
+						<pre class="font-mono text-sm whitespace-pre-wrap text-foreground/80">{formatLinks(
+								result.links || []
+							) || 'No links found'}</pre>
+					{/if}
 				</Tabs.Content>
 				{#if hasImages}
 					<Tabs.Content value="images" class="mt-0">
@@ -115,13 +199,19 @@
 						<div>
 							<div class="mb-3 flex flex-wrap items-center gap-2">
 								{#if result.screenshot.width && result.screenshot.height}
-									<Badge variant="outline" class="text-[10px]">{result.screenshot.width}×{result.screenshot.height}px</Badge>
+									<Badge variant="outline" class="text-[10px]"
+										>{result.screenshot.width}×{result.screenshot.height}px</Badge
+									>
 								{/if}
 								{#if result.screenshot.format}
-									<Badge variant="outline" class="text-[10px]">{result.screenshot.format.toUpperCase()}</Badge>
+									<Badge variant="outline" class="text-[10px]"
+										>{result.screenshot.format.toUpperCase()}</Badge
+									>
 								{/if}
 								{#if result.screenshot.size_bytes}
-									<Badge variant="outline" class="text-[10px]">{(result.screenshot.size_bytes / 1024).toFixed(1)} KB</Badge>
+									<Badge variant="outline" class="text-[10px]"
+										>{(result.screenshot.size_bytes / 1024).toFixed(1)} KB</Badge
+									>
 								{/if}
 								{#if result.screenshot.full_page}
 									<Badge variant="secondary" class="text-[10px]">Full Page</Badge>

@@ -48,11 +48,12 @@
 		summary: false,
 		summary_sentences: 5,
 		redact_pii: false,
-		block_ads: false,
-		remove_base64_images: false,
-		include_links: false,
+		block_ads: true,
+		remove_base64_images: true,
+		include_links: true,
 		extract_schema: '',
-		actions: ''
+		actions: '',
+		urls: ''
 	});
 
 	const crawlOptions = new PersistedState('cinder-crawl-options', {
@@ -70,6 +71,8 @@
 
 	const searchOptions = new PersistedState('cinder-search-options', {
 		mode: 'default',
+		category: '',
+		rerank: false,
 		limit: 5,
 		offset: 0,
 		maxAge: 0,
